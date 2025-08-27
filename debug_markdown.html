@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Debug Markdown Streaming</title>
+    <script src="https://cdn.jsdelivr.net/npm/markdown-it@13.0.1/dist/markdown-it.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.5/dist/purify.min.js"></script>
+    <style>
+        body {
+            font-family: monospace;
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+        .panel {
+            border: 1px solid #ccc;
+            padding: 10px;
+            height: 80vh;
+            overflow-y: auto;
+        }
+        .chunk {
+            border-bottom: 1px dotted #999;
+            padding: 5px;
+            margin: 2px 0;
+        }
+        .chunk-info {
+            color: #666;
+            font-size: 10px;
+        }
+        #rendered {
+            background: #f9f9f9;
+            font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+        }
+        #rendered h1, #rendered h2, #rendered h3 {
+            margin-top: 1em;
+            margin-bottom: 0.5em;
+        }
+        #rendered p {
+            margin: 1em 0;
+        }
+        #rendered ul, #rendered ol {
+            margin: 1em 0;
+            padding-left: 2em;
+        }
+        #rendered li {
+            margin: 0.5em 0;
+        }
+        pre {
+            background: #f0f0f0;
+            padding: 5px;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+        .controls {
+            margin: 20px 0;
+        }
+        button {
+            padding: 10px 20px;
+            margin: 5px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <h1>Debug Markdown Streaming</h1>
+    
+    <div class="controls">
+        <button onclick="testStreaming()">Test Streaming</button>
+        <button onclick="clearAll()">Clear</button>
+        <label>
+            <input type="checkbox" id="showChunks" checked> Show chunk boundaries
+        </label>
+    </div>
+    
+    <div class="container">
+        <div class="panel">
+            <h3>Raw Chunks & Buffer</h3>
+            <div id="chunks"></div>
+            <hr>
+            <h4>Current Buffer:</h4>
+            <pre id="buffer"></pre>
+        </div>
+        <div class="panel" id="rendered">
+            <h3>Rendered Output</h3>
+            <div id="output"></div>
+        </div>
+    </div>
+
+    <script>
+        const md = window.markdownit({
+            html: false,
+            breaks: true,
+            linkify: true,
+            typographer: true
+        });
+        
+        let fullBuffer = '';
+        let chunkCount = 0;
+        
+        // Simulate problematic streaming chunks
+        const testContent = `### Project Summary
+
+This is a **test document** to verify markdown rendering.
+
+#### Key Features:
+- ✅ Proper header spacing
+- ✅ List formatting with line breaks
+- ✅ Bold and *italic* text
+- ✅ Code blocks support
+
+---
+
+#### Code Example:
+
+\`\`\`python
+def hello_world():
+    print("Hello, World!")
+    return True
+\`\`\`
+
+#### Additional Notes:
+
+1. First ordered item
+2. Second ordered item
+   - Nested unordered item
+   - Another nested item
+3. Third ordered item
+
+> **Important:** This is a blockquote with **bold** text.
+
+Here's some inline \`code\` and a [link](https://example.com).
+
+---
+
+Final paragraph with proper spacing after the horizontal rule.`;
+        
+        function simulateChunks(text) {
+            const chunks = [];
+            let pos = 0;
+            
+            while (pos < text.length) {
+                // Simulate variable chunk sizes (like real streaming)
+                const chunkSize = Math.floor(Math.random() * 15) + 3;
+                chunks.push(text.slice(pos, pos + chunkSize));
+                pos += chunkSize;
+            }
+            
+            return chunks;
+        }
+        
+        async function testStreaming() {
+            clearAll();
+            const chunks = simulateChunks(testContent);
+            const chunksDiv = document.getElementById('chunks');
+            const bufferPre = document.getElementById('buffer');
+            const outputDiv = document.getElementById('output');
+            
+            for (let i = 0; i < chunks.length; i++) {
+                const chunk = chunks[i];
+                chunkCount++;
+                
+                // Add chunk to display
+                if (document.getElementById('showChunks').checked) {
+                    const chunkDiv = document.createElement('div');
+                    chunkDiv.className = 'chunk';
+                    chunkDiv.innerHTML = `
+                        <div class="chunk-info">Chunk #${chunkCount} (${chunk.length} chars)</div>
+                        <pre>${chunk.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</pre>
+                    `;
+                    chunksDiv.appendChild(chunkDiv);
+                }
+                
+                // Add to buffer
+                fullBuffer += chunk;
+                bufferPre.textContent = fullBuffer;
+                
+                // Render markdown
+                try {
+                    const rendered = md.render(fullBuffer);
+                    const sanitized = DOMPurify.sanitize(rendered);
+                    outputDiv.innerHTML = sanitized;
+                } catch (e) {
+                    console.error('Render error:', e);
+                    outputDiv.textContent = fullBuffer;
+                }
+                
+                // Scroll to bottom
+                chunksDiv.scrollTop = chunksDiv.scrollHeight;
+                outputDiv.scrollTop = outputDiv.scrollHeight;
+                
+                // Simulate streaming delay
+                await new Promise(resolve => setTimeout(resolve, 50));
+            }
+            
+            // Show final statistics
+            console.log('Streaming complete:', {
+                chunks: chunkCount,
+                totalLength: fullBuffer.length,
+                finalBuffer: fullBuffer
+            });
+        }
+        
+        function clearAll() {
+            fullBuffer = '';
+            chunkCount = 0;
+            document.getElementById('chunks').innerHTML = '';
+            document.getElementById('buffer').textContent = '';
+            document.getElementById('output').innerHTML = '';
+        }
+        
+        // Test the actual chat endpoint
+        async function testRealEndpoint() {
+            const response = await fetch('/chat', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ 
+                    message: 'Please provide a summary with headers, lists, and code examples to test markdown rendering.' 
+                })
+            });
+            
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            let buffer = '';
+            let fullContent = '';
+            
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                
+                const chunk = decoder.decode(value, { stream: true });
+                console.log('Raw chunk received:', chunk);
+                
+                // Parse SSE format
+                const lines = chunk.split('\n');
+                for (const line of lines) {
+                    if (line.startsWith('data: ')) {
+                        const content = line.slice(6);
+                        fullContent += content;
+                        console.log('Content chunk:', content);
+                        console.log('Full content so far:', fullContent);
+                    }
+                }
+            }
+            
+            console.log('Final complete content:', fullContent);
+        }
+    </script>
+</body>
+</html>

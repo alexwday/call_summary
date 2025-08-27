@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Markdown Rendering Test</title>
+    
+    <!-- Test multiple markdown libraries -->
+    <script src="https://cdn.jsdelivr.net/npm/marked@4.3.0/marked.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/markdown-it@13.0.1/dist/markdown-it.min.js"></script>
+    <script src="https://unpkg.com/snarkdown@2.0.0/dist/snarkdown.umd.js"></script>
+    
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        
+        h1 {
+            color: #333;
+            border-bottom: 2px solid #667eea;
+            padding-bottom: 10px;
+        }
+        
+        .test-container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .input-section, .output-section {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        textarea {
+            width: 100%;
+            height: 200px;
+            font-family: monospace;
+            font-size: 14px;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        
+        .controls {
+            margin: 20px 0;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        
+        button {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        
+        button:hover {
+            background: #5568d3;
+        }
+        
+        select {
+            padding: 8px;
+            border-radius: 4px;
+            border: 1px solid #ddd;
+            font-size: 14px;
+        }
+        
+        .output {
+            background: #fafafa;
+            padding: 15px;
+            border-radius: 4px;
+            min-height: 200px;
+            border: 1px solid #e0e0e0;
+        }
+        
+        .streaming-output {
+            background: #fff;
+            border: 2px solid #667eea;
+        }
+        
+        /* Markdown styles */
+        .output h1, .output h2, .output h3 {
+            margin-top: 1em;
+            margin-bottom: 0.5em;
+            line-height: 1.3;
+        }
+        
+        .output h1:first-child, 
+        .output h2:first-child, 
+        .output h3:first-child {
+            margin-top: 0;
+        }
+        
+        .output p {
+            margin: 0.8em 0;
+            line-height: 1.6;
+        }
+        
+        .output ul, .output ol {
+            margin: 0.8em 0;
+            padding-left: 2em;
+        }
+        
+        .output li {
+            margin: 0.3em 0;
+        }
+        
+        .output hr {
+            margin: 1.5em 0;
+            border: none;
+            border-top: 2px solid #e0e0e0;
+        }
+        
+        .output code {
+            background: #f4f4f4;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: monospace;
+        }
+        
+        .output pre {
+            background: #f8f9fa;
+            padding: 12px;
+            border-radius: 5px;
+            overflow-x: auto;
+            margin: 1em 0;
+        }
+        
+        .output blockquote {
+            border-left: 4px solid #667eea;
+            padding-left: 1em;
+            margin: 1em 0;
+            color: #666;
+        }
+        
+        .stats {
+            margin-top: 10px;
+            padding: 10px;
+            background: #f0f0f0;
+            border-radius: 4px;
+            font-size: 12px;
+            font-family: monospace;
+        }
+        
+        .warning {
+            background: #fff3cd;
+            border: 1px solid #ffc107;
+            color: #856404;
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <h1>Markdown Rendering Test Suite</h1>
+    
+    <div class="warning">
+        Testing different markdown rendering approaches for streaming LLM responses.
+    </div>
+    
+    <div class="controls">
+        <select id="parserSelect">
+            <option value="marked">Marked.js</option>
+            <option value="markdown-it">Markdown-it</option>
+            <option value="snarkdown">Snarkdown (lightweight)</option>
+            <option value="incremental">Incremental Custom Parser</option>
+        </select>
+        <button onclick="parseMarkdown()">Parse Static</button>
+        <button onclick="startStreaming()">Start Streaming</button>
+        <button onclick="stopStreaming()">Stop Streaming</button>
+        <button onclick="clearOutputs()">Clear</button>
+    </div>
+    
+    <div class="test-container">
+        <div class="input-section">
+            <h3>Markdown Input</h3>
+            <textarea id="markdownInput">### Project Summary
+
+This is a **test document** to verify markdown rendering.
+
+#### Key Features:
+- ✅ Proper header spacing
+- ✅ List formatting with line breaks
+- ✅ Bold and *italic* text
+- ✅ Code blocks support
+
+---
+
+#### Code Example:
+
+```python
+def hello_world():
+    print("Hello, World!")
+    return True
+```
+
+#### Additional Notes:
+
+1. First ordered item
+2. Second ordered item
+   - Nested unordered item
+   - Another nested item
+3. Third ordered item
+
+> **Important:** This is a blockquote with **bold** text.
+
+Here's some inline `code` and a [link](https://example.com).
+
+---
+
+Final paragraph with proper spacing after the horizontal rule.</textarea>
+        </div>
+        
+        <div class="output-section">
+            <h3>Static Output</h3>
+            <div id="staticOutput" class="output"></div>
+            <div id="staticStats" class="stats"></div>
+        </div>
+    </div>
+    
+    <div class="test-container">
+        <div class="input-section">
+            <h3>Streaming Simulation</h3>
+            <div id="streamingInput" class="output" style="font-family: monospace; font-size: 12px;"></div>
+        </div>
+        
+        <div class="output-section">
+            <h3>Streaming Output</h3>
+            <div id="streamingOutput" class="output streaming-output"></div>
+            <div id="streamingStats" class="stats"></div>
+        </div>
+    </div>
+
+    <script>
+        let streamingInterval = null;
+        let streamingContent = '';
+        let currentCharIndex = 0;
+        
+        // Initialize markdown-it
+        let markdownIt = null;
+        if (typeof markdownit !== 'undefined') {
+            markdownIt = window.markdownit({
+                html: false,
+                breaks: true,
+                linkify: true,
+                typographer: true
+            });
+        }
+        
+        // Custom incremental parser (simplified)
+        class IncrementalMarkdownParser {
+            constructor() {
+                this.buffer = '';
+                this.lastParsedLength = 0;
+            }
+            
+            parse(chunk) {
+                this.buffer += chunk;
+                return this.render();
+            }
+            
+            render() {
+                // This is a simplified version - in production you'd want a proper incremental parser
+                let html = this.buffer;
+                
+                // Headers
+                html = html.replace(/^### (.*?)$/gm, '<h3>$1</h3>');
+                html = html.replace(/^## (.*?)$/gm, '<h2>$1</h2>');
+                html = html.replace(/^# (.*?)$/gm, '<h1>$1</h1>');
+                
+                // Bold and italic
+                html = html.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+                html = html.replace(/\*(.*?)\*/g, '<em>$1</em>');
+                
+                // Line breaks and paragraphs
+                html = html.replace(/\n\n/g, '</p><p>');
+                html = '<p>' + html + '</p>';
+                
+                // Lists (simplified)
+                html = html.replace(/^- (.*?)$/gm, '<li>$1</li>');
+                html = html.replace(/(<li>.*<\/li>\n?)+/g, '<ul>$&</ul>');
+                
+                // Horizontal rules
+                html = html.replace(/^---$/gm, '<hr>');
+                
+                // Code blocks
+                html = html.replace(/```(\w+)?\n([\s\S]*?)```/g, '<pre><code>$2</code></pre>');
+                html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
+                
+                return html;
+            }
+        }
+        
+        const incrementalParser = new IncrementalMarkdownParser();
+        
+        function parseMarkdown() {
+            const input = document.getElementById('markdownInput').value;
+            const parser = document.getElementById('parserSelect').value;
+            const output = document.getElementById('staticOutput');
+            const stats = document.getElementById('staticStats');
+            
+            const startTime = performance.now();
+            let html = '';
+            
+            try {
+                switch(parser) {
+                    case 'marked':
+                        if (typeof marked !== 'undefined') {
+                            marked.setOptions({
+                                breaks: true,
+                                gfm: true,
+                                headerIds: false
+                            });
+                            html = marked.parse(input);
+                        }
+                        break;
+                    
+                    case 'markdown-it':
+                        if (markdownIt) {
+                            html = markdownIt.render(input);
+                        }
+                        break;
+                    
+                    case 'snarkdown':
+                        if (typeof snarkdown !== 'undefined') {
+                            // Snarkdown doesn't support all features but is very fast
+                            html = snarkdown(input);
+                        }
+                        break;
+                    
+                    case 'incremental':
+                        incrementalParser.buffer = '';
+                        html = incrementalParser.parse(input);
+                        break;
+                }
+                
+                output.innerHTML = html;
+                const endTime = performance.now();
+                
+                stats.innerHTML = `
+                    Parser: ${parser}<br>
+                    Time: ${(endTime - startTime).toFixed(2)}ms<br>
+                    Input length: ${input.length} chars<br>
+                    Output length: ${html.length} chars
+                `;
+            } catch (error) {
+                output.innerHTML = `<div class="warning">Error: ${error.message}</div>`;
+            }
+        }
+        
+        function startStreaming() {
+            if (streamingInterval) return;
+            
+            const input = document.getElementById('markdownInput').value;
+            const parser = document.getElementById('parserSelect').value;
+            const streamInput = document.getElementById('streamingInput');
+            const streamOutput = document.getElementById('streamingOutput');
+            const stats = document.getElementById('streamingStats');
+            
+            // Reset
+            streamingContent = '';
+            currentCharIndex = 0;
+            streamInput.textContent = '';
+            streamOutput.innerHTML = '';
+            incrementalParser.buffer = '';
+            
+            let totalParseTime = 0;
+            let parseCount = 0;
+            
+            streamingInterval = setInterval(() => {
+                if (currentCharIndex >= input.length) {
+                    stopStreaming();
+                    return;
+                }
+                
+                // Simulate chunked streaming (variable chunk sizes)
+                const chunkSize = Math.floor(Math.random() * 10) + 5;
+                const chunk = input.slice(currentCharIndex, currentCharIndex + chunkSize);
+                currentCharIndex += chunkSize;
+                
+                streamingContent += chunk;
+                streamInput.textContent = streamingContent;
+                
+                const startTime = performance.now();
+                let html = '';
+                
+                try {
+                    switch(parser) {
+                        case 'marked':
+                            if (typeof marked !== 'undefined') {
+                                html = marked.parse(streamingContent);
+                            }
+                            break;
+                        
+                        case 'markdown-it':
+                            if (markdownIt) {
+                                html = markdownIt.render(streamingContent);
+                            }
+                            break;
+                        
+                        case 'snarkdown':
+                            if (typeof snarkdown !== 'undefined') {
+                                html = snarkdown(streamingContent);
+                            }
+                            break;
+                        
+                        case 'incremental':
+                            html = incrementalParser.parse(chunk);
+                            break;
+                    }
+                    
+                    streamOutput.innerHTML = html;
+                    const endTime = performance.now();
+                    
+                    totalParseTime += (endTime - startTime);
+                    parseCount++;
+                    
+                    stats.innerHTML = `
+                        Parser: ${parser}<br>
+                        Progress: ${currentCharIndex}/${input.length} chars<br>
+                        Chunks: ${parseCount}<br>
+                        Avg parse time: ${(totalParseTime / parseCount).toFixed(2)}ms<br>
+                        Total parse time: ${totalParseTime.toFixed(2)}ms
+                    `;
+                } catch (error) {
+                    console.error('Streaming parse error:', error);
+                }
+                
+                // Scroll to bottom
+                streamOutput.scrollTop = streamOutput.scrollHeight;
+                
+            }, 50); // Simulate 50ms between chunks
+        }
+        
+        function stopStreaming() {
+            if (streamingInterval) {
+                clearInterval(streamingInterval);
+                streamingInterval = null;
+            }
+        }
+        
+        function clearOutputs() {
+            document.getElementById('staticOutput').innerHTML = '';
+            document.getElementById('streamingOutput').innerHTML = '';
+            document.getElementById('streamingInput').textContent = '';
+            document.getElementById('staticStats').innerHTML = '';
+            document.getElementById('streamingStats').innerHTML = '';
+            stopStreaming();
+        }
+        
+        // Initial parse
+        parseMarkdown();
+    </script>
+</body>
+</html>

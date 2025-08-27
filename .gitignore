@@ -21,4 +21,4 @@ venv/
 # Project specific
 *.log
 temp/
-tmp/
+tmp/.env
