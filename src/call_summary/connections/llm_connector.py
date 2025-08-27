@@ -419,6 +419,7 @@ def stream(  # pylint: disable=too-many-locals
     messages: List[Dict[str, str]],
     context: Dict[str, Any],
     llm_params: Optional[Dict[str, Any]] = None,
+    model_size: str = "large",
 ) -> Generator[Dict[str, Any], None, None]:
     """
     Generate a streaming completion from the LLM.
@@ -453,9 +454,10 @@ def stream(  # pylint: disable=too-many-locals
     logger = get_logger()
     llm_params = llm_params or {}
 
-    # Get model configuration using helper
+    # Get model configuration using helper - use model_size as default tier
     model, temperature, max_tokens, model_tier = _get_model_config(
-        llm_params.get("model"), llm_params.get("temperature"), llm_params.get("max_tokens")
+        llm_params.get("model"), llm_params.get("temperature"), llm_params.get("max_tokens"),
+        default_tier=model_size
     )
 
     logger.info(
@@ -480,6 +482,7 @@ def stream(  # pylint: disable=too-many-locals
             temperature=temperature,
             max_tokens=max_tokens,
             stream=True,
+            stream_options={"include_usage": True},  # Request usage stats in stream
             **{
                 k: v
                 for k, v in llm_params.items()
@@ -503,9 +506,9 @@ def stream(  # pylint: disable=too-many-locals
         # Calculate elapsed time
         elapsed = time.time() - start_time
 
-        # Log streaming completion
+        # Log streaming completion and calculate metrics
         if accumulated_usage:
-            _calculate_and_log_metrics(
+            metrics = _calculate_and_log_metrics(
                 usage=accumulated_usage,
                 model_tier=model_tier,
                 context={
@@ -516,9 +519,15 @@ def stream(  # pylint: disable=too-many-locals
                 },
                 operation_type=f"streaming completed (chunks={chunk_count})",
             )
+            # Yield a final chunk with usage information for the app to process
+            yield {
+                "usage": accumulated_usage,
+                "metrics": metrics,
+                "type": "usage_stats"
+            }
         else:
             logger.info(
-                "LLM streaming completed",
+                "LLM streaming completed without usage data",
                 execution_id=context["execution_id"],
                 model=model,
                 chunks=chunk_count,

@@ -12,13 +12,16 @@ from src.call_summary.utils.settings import config
 from src.call_summary.utils.ssl import setup_ssl
 from src.call_summary.connections.oauth_connector import setup_authentication
 from src.call_summary.connections.llm_connector import stream as llm_stream
+from src.call_summary.prompts import get_prompt
 
 logger = get_logger()
 
 
 def chat_with_documents(
     messages: List[Dict[str, str]], 
-    documents: Optional[List[str]] = None
+    documents: Optional[List[str]] = None,
+    model_size: str = 'large',
+    prompt_mode: str = 'basic'
 ) -> Generator[Dict[str, str], None, None]:
     """
     Stream chat responses with optional document context.
@@ -49,18 +52,8 @@ def chat_with_documents(
         # Build conversation with system prompt
         enhanced_messages = []
         
-        # Simple, conversational system prompt
-        system_prompt = """You are a helpful and friendly AI assistant. You can have natural conversations 
-        and help analyze documents when they are provided. You respond in a clear, conversational tone
-        and ALWAYS use proper markdown formatting for structure and clarity.
-        
-        When creating lists, use proper markdown syntax:
-        - Use "- " or "* " for bullet points
-        - Use "1. " for numbered lists
-        - Use "**bold**" for emphasis
-        - Use headers (# ## ###) for sections
-        - Use `code` for inline code
-        - Use tables when appropriate"""
+        # Get the appropriate prompt based on mode
+        system_prompt = get_prompt(prompt_mode)
         
         enhanced_messages.append({
             "role": "system",
@@ -85,11 +78,19 @@ def chat_with_documents(
         enhanced_messages.extend(messages)
         
         # Stream response from LLM
-        logger.info(f"Sending request to LLM with {len(enhanced_messages)} messages")
+        logger.info(f"Sending request to LLM with {len(enhanced_messages)} messages using model: {model_size}")
         
-        for chunk in llm_stream(enhanced_messages, context):
-            # Extract text content from chunk
-            if chunk.get("choices") and len(chunk["choices"]) > 0:
+        for chunk in llm_stream(enhanced_messages, context, model_size=model_size):
+            # Handle different chunk types
+            if chunk.get("type") == "usage_stats":
+                # Pass through usage statistics
+                yield {
+                    "type": "usage",
+                    "usage": chunk.get("usage", {}),
+                    "metrics": chunk.get("metrics", {})
+                }
+            elif chunk.get("choices") and len(chunk["choices"]) > 0:
+                # Extract text content from chunk
                 delta = chunk["choices"][0].get("delta", {})
                 content = delta.get("content", "")
                 if content:
@@ -97,6 +98,12 @@ def chat_with_documents(
                         "type": "assistant",
                         "content": content
                     }
+            elif chunk.get("usage"):
+                # Handle usage in regular chunks (fallback)
+                yield {
+                    "type": "usage",
+                    "usage": chunk["usage"]
+                }
             
     except Exception as e:
         logger.error(f"Error in chat: {e}")
@@ -118,6 +125,8 @@ def model(conversation: Dict[str, Any]) -> Generator[Dict[str, str], None, None]
     """
     messages = conversation.get("messages", [])
     documents = conversation.get("documents", None)
+    model_size = conversation.get("model", "large")
+    prompt_mode = conversation.get("prompt_mode", "basic")
     
-    for chunk in chat_with_documents(messages, documents):
+    for chunk in chat_with_documents(messages, documents, model_size, prompt_mode):
         yield chunk

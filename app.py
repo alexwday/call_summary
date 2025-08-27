@@ -11,6 +11,7 @@ import PyPDF2
 from pathlib import Path
 from src.call_summary.main import model
 from src.call_summary.utils.logging import get_logger
+from src.call_summary.utils.settings import config
 
 logger = get_logger()
 
@@ -27,6 +28,25 @@ os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
 # Store documents in session (in production, use a database)
 SESSIONS = {}
+
+# Model options from config
+MODEL_OPTIONS = {
+    'small': {
+        'name': config.llm.small.model,
+        'cost_input': config.llm.small.cost_per_1k_input,
+        'cost_output': config.llm.small.cost_per_1k_output
+    },
+    'medium': {
+        'name': config.llm.medium.model,
+        'cost_input': config.llm.medium.cost_per_1k_input,
+        'cost_output': config.llm.medium.cost_per_1k_output
+    },
+    'large': {
+        'name': config.llm.large.model,
+        'cost_input': config.llm.large.cost_per_1k_input,
+        'cost_output': config.llm.large.cost_per_1k_output
+    }
+}
 
 
 def allowed_file(filename):
@@ -96,9 +116,13 @@ def index():
         session['session_id'] = str(uuid.uuid4())
         SESSIONS[session['session_id']] = {
             'documents': [],
-            'messages': []
+            'messages': [],
+            'total_tokens': {'input': 0, 'output': 0},
+            'total_cost': 0.0,
+            'selected_model': 'large',  # Default model
+            'prompt_mode': 'stage1'  # Default prompt mode
         }
-    return render_template('chat.html')
+    return render_template('chat_with_prompts.html')
 
 
 @app.route('/upload', methods=['POST'])
@@ -113,7 +137,11 @@ def upload_document():
         if session_id not in SESSIONS:
             SESSIONS[session_id] = {
                 'documents': [],
-                'messages': []
+                'messages': [],
+                'total_tokens': {'input': 0, 'output': 0},
+                'total_cost': 0.0,
+                'selected_model': 'large',  # Default model
+                'prompt_mode': 'stage1'  # Default prompt mode
             }
         
         if 'file' not in request.files:
@@ -136,8 +164,10 @@ def upload_document():
         # Extract text
         text_content = extract_text_from_file(file_path, filename)
         
-        # Store document content
+        # Store document content with unique ID
+        doc_id = str(uuid.uuid4())[:8]
         SESSIONS[session_id]['documents'].append({
+            'id': doc_id,
             'filename': filename,
             'content': text_content,
             'path': file_path
@@ -151,8 +181,10 @@ def upload_document():
         return jsonify({
             'success': True,
             'filename': filename,
+            'document_id': doc_id,
             'message': f'Successfully uploaded {filename}',
-            'document_count': len(SESSIONS[session_id]['documents'])
+            'document_count': len(SESSIONS[session_id]['documents']),
+            'documents': [{'id': d['id'], 'filename': d['filename']} for d in SESSIONS[session_id]['documents']]
         })
         
     except Exception as e:
@@ -172,14 +204,24 @@ def chat():
         if session_id not in SESSIONS:
             SESSIONS[session_id] = {
                 'documents': [],
-                'messages': []
+                'messages': [],
+                'total_tokens': {'input': 0, 'output': 0},
+                'total_cost': 0.0,
+                'selected_model': 'large',  # Default model
+                'prompt_mode': 'stage1'  # Default prompt mode
             }
         
         data = request.json
         message = data.get('message', '')
+        selected_model = data.get('model', SESSIONS[session_id].get('selected_model', 'large'))
+        prompt_mode = data.get('prompt_mode', SESSIONS[session_id].get('prompt_mode', 'stage1'))
         
         if not message:
             return jsonify({'error': 'No message provided'}), 400
+        
+        # Update selected model and prompt mode
+        SESSIONS[session_id]['selected_model'] = selected_model
+        SESSIONS[session_id]['prompt_mode'] = prompt_mode
         
         # Add user message to history
         SESSIONS[session_id]['messages'].append({
@@ -189,7 +231,9 @@ def chat():
         
         # Prepare conversation with documents
         conversation = {
-            'messages': SESSIONS[session_id]['messages']
+            'messages': SESSIONS[session_id]['messages'],
+            'model': selected_model,
+            'prompt_mode': prompt_mode
         }
         
         # Add documents if available
@@ -199,6 +243,8 @@ def chat():
         # Stream response
         def generate():
             assistant_message = ""
+            usage_info = None
+            metrics_info = None
             for chunk in model(conversation):
                 if chunk.get('type') == 'assistant':
                     content = chunk.get('content', '')
@@ -209,13 +255,35 @@ def chat():
                     yield f"data: {escaped_content}\n\n"
                 elif chunk.get('type') == 'error':
                     yield f"data: ERROR: {chunk.get('content', 'Unknown error')}\n\n"
+                elif chunk.get('type') == 'usage':
+                    # Capture usage information from the LLM response
+                    usage_info = chunk.get('usage', {})
+                    metrics_info = chunk.get('metrics', {})
             
-            # Store assistant message
+            # Store assistant message and track tokens/cost from actual API response
             if assistant_message:
                 SESSIONS[session_id]['messages'].append({
                     'role': 'assistant',
                     'content': assistant_message
                 })
+                
+                # Update token counts and cost if we have usage info
+                if usage_info:
+                    input_tokens = usage_info.get('prompt_tokens', 0)
+                    output_tokens = usage_info.get('completion_tokens', 0)
+                    
+                    SESSIONS[session_id]['total_tokens']['input'] += input_tokens
+                    SESSIONS[session_id]['total_tokens']['output'] += output_tokens
+                    
+                    # Use the pre-calculated cost from llm_connector if available
+                    if metrics_info and 'total_cost' in metrics_info:
+                        SESSIONS[session_id]['total_cost'] += metrics_info['total_cost']
+                    else:
+                        # Fallback to manual calculation if metrics not available
+                        model_config = MODEL_OPTIONS[selected_model]
+                        input_cost = (input_tokens / 1000) * model_config['cost_input']
+                        output_cost = (output_tokens / 1000) * model_config['cost_output']
+                        SESSIONS[session_id]['total_cost'] += input_cost + output_cost
         
         return Response(generate(), mimetype='text/event-stream')
         
@@ -240,7 +308,10 @@ def clear_session():
                 # Clear session data
                 SESSIONS[session_id] = {
                     'documents': [],
-                    'messages': []
+                    'messages': [],
+                    'total_tokens': {'input': 0, 'output': 0},
+                    'total_cost': 0.0,
+                    'selected_model': 'large'  # Default model
                 }
             
             logger.info(f"Session cleared: {session_id}")
@@ -250,6 +321,137 @@ def clear_session():
     except Exception as e:
         logger.error(f"Clear session error: {e}")
         return jsonify({'error': str(e)}), 500
+
+
+@app.route('/remove_document', methods=['POST'])
+def remove_document():
+    """Remove a specific document from the session."""
+    try:
+        if 'session_id' not in session:
+            return jsonify({'error': 'No session found'}), 400
+        
+        session_id = session['session_id']
+        
+        if session_id not in SESSIONS:
+            return jsonify({'error': 'Session not found'}), 400
+        
+        data = request.json
+        doc_id = data.get('document_id')
+        
+        if not doc_id:
+            return jsonify({'error': 'No document_id provided'}), 400
+        
+        # Find and remove the document
+        documents = SESSIONS[session_id]['documents']
+        doc_to_remove = None
+        for doc in documents:
+            if doc['id'] == doc_id:
+                doc_to_remove = doc
+                break
+        
+        if doc_to_remove:
+            # Remove file if it exists
+            if 'path' in doc_to_remove and os.path.exists(doc_to_remove['path']):
+                os.remove(doc_to_remove['path'])
+            
+            # Remove from session
+            documents.remove(doc_to_remove)
+            
+            logger.info(f"Document removed: {doc_to_remove['filename']} from session {session_id}")
+            
+            return jsonify({
+                'success': True,
+                'message': f"Removed {doc_to_remove['filename']}",
+                'documents': [{'id': d['id'], 'filename': d['filename']} for d in documents]
+            })
+        else:
+            return jsonify({'error': 'Document not found'}), 404
+            
+    except Exception as e:
+        logger.error(f"Remove document error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/set_model', methods=['POST'])
+def set_model():
+    """Set the model for the session."""
+    try:
+        if 'session_id' not in session:
+            return jsonify({'error': 'No session found'}), 400
+        
+        session_id = session['session_id']
+        
+        if session_id not in SESSIONS:
+            SESSIONS[session_id] = {
+                'documents': [],
+                'messages': [],
+                'total_tokens': {'input': 0, 'output': 0},
+                'total_cost': 0.0,
+                'selected_model': 'large',  # Default model
+                'prompt_mode': 'stage1'  # Default prompt mode
+            }
+        
+        data = request.json
+        model_size = data.get('model')
+        
+        if model_size not in MODEL_OPTIONS:
+            return jsonify({'error': 'Invalid model size'}), 400
+        
+        SESSIONS[session_id]['selected_model'] = model_size
+        
+        return jsonify({
+            'success': True,
+            'model': model_size,
+            'model_name': MODEL_OPTIONS[model_size]['name']
+        })
+        
+    except Exception as e:
+        logger.error(f"Set model error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/set_prompt', methods=['POST'])
+def set_prompt():
+    """Set the prompt mode for the session."""
+    try:
+        if 'session_id' not in session:
+            return jsonify({'error': 'No session found'}), 400
+        
+        session_id = session['session_id']
+        
+        if session_id not in SESSIONS:
+            SESSIONS[session_id] = {
+                'documents': [],
+                'messages': [],
+                'total_tokens': {'input': 0, 'output': 0},
+                'total_cost': 0.0,
+                'selected_model': 'large',  # Default model
+                'prompt_mode': 'stage1'  # Default prompt mode
+            }
+        
+        data = request.json
+        prompt_mode = data.get('prompt_mode')
+        
+        valid_modes = ['stage1', 'stage2', 'basic', 'default']
+        if prompt_mode not in valid_modes:
+            return jsonify({'error': 'Invalid prompt mode'}), 400
+        
+        SESSIONS[session_id]['prompt_mode'] = prompt_mode
+        
+        return jsonify({
+            'success': True,
+            'prompt_mode': prompt_mode
+        })
+        
+    except Exception as e:
+        logger.error(f"Set prompt error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/models', methods=['GET'])
+def get_models():
+    """Get available models."""
+    return jsonify(MODEL_OPTIONS)
 
 
 @app.route('/status', methods=['GET'])
@@ -268,14 +470,21 @@ def status():
         if session_id not in SESSIONS:
             SESSIONS[session_id] = {
                 'documents': [],
-                'messages': []
+                'messages': [],
+                'total_tokens': {'input': 0, 'output': 0},
+                'total_cost': 0.0,
+                'selected_model': 'large',  # Default model
+                'prompt_mode': 'stage1'  # Default prompt mode
             }
         
         return jsonify({
             'session_id': session_id,
             'document_count': len(SESSIONS[session_id]['documents']),
             'message_count': len(SESSIONS[session_id]['messages']),
-            'documents': [doc['filename'] for doc in SESSIONS[session_id]['documents']]
+            'documents': [{'id': doc['id'], 'filename': doc['filename']} for doc in SESSIONS[session_id]['documents']],
+            'selected_model': SESSIONS[session_id].get('selected_model', 'large'),
+            'total_tokens': SESSIONS[session_id].get('total_tokens', {'input': 0, 'output': 0}),
+            'total_cost': round(SESSIONS[session_id].get('total_cost', 0.0), 4)
         })
         
     except Exception as e:
