@@ -4,6 +4,7 @@ Flask web application for document chatbot.
 
 import os
 import uuid
+from datetime import datetime
 from flask import Flask, render_template, request, jsonify, Response, session
 from werkzeug.utils import secure_filename
 import docx
@@ -109,6 +110,33 @@ def extract_text_from_file(file_path, filename):
         return "Unsupported file type"
 
 
+def get_file_metadata(file_path, original_filename):
+    """Extract comprehensive file metadata."""
+    path = Path(file_path)
+    stat = path.stat()
+    
+    metadata = {
+        'original_filename': original_filename,
+        'file_extension': original_filename.rsplit('.', 1)[1].lower() if '.' in original_filename else 'unknown',
+        'file_size_bytes': stat.st_size,
+        'file_size_human': format_file_size(stat.st_size),
+        'upload_timestamp': datetime.now().isoformat(),
+        'last_modified': datetime.fromtimestamp(stat.st_mtime).isoformat(),
+        'file_path': str(path.absolute())
+    }
+    
+    return metadata
+
+
+def format_file_size(size_bytes):
+    """Format file size in human-readable format."""
+    for unit in ['B', 'KB', 'MB', 'GB']:
+        if size_bytes < 1024.0:
+            return f"{size_bytes:.2f} {unit}"
+        size_bytes /= 1024.0
+    return f"{size_bytes:.2f} TB"
+
+
 @app.route('/')
 def index():
     """Main chat interface."""
@@ -164,13 +192,17 @@ def upload_document():
         # Extract text
         text_content = extract_text_from_file(file_path, filename)
         
-        # Store document content with unique ID
+        # Get comprehensive file metadata
+        metadata = get_file_metadata(file_path, filename)
+        
+        # Store document content with unique ID and metadata
         doc_id = str(uuid.uuid4())[:8]
         SESSIONS[session_id]['documents'].append({
             'id': doc_id,
             'filename': filename,
             'content': text_content,
-            'path': file_path
+            'path': file_path,
+            'metadata': metadata
         })
         
         # Clean up file after extraction (optional)
@@ -236,9 +268,9 @@ def chat():
             'prompt_mode': prompt_mode
         }
         
-        # Add documents if available
+        # Add documents with metadata if available
         if SESSIONS[session_id]['documents']:
-            conversation['documents'] = [doc['content'] for doc in SESSIONS[session_id]['documents']]
+            conversation['documents'] = SESSIONS[session_id]['documents']
         
         # Stream response
         def generate():

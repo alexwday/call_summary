@@ -63,9 +63,29 @@ def chat_with_documents(
         # Add document content if provided
         if documents:
             document_context = "\n\n===== UPLOADED DOCUMENTS =====\n\n"
-            for i, doc_content in enumerate(documents, 1):
-                document_context += f"Document {i}:\n{doc_content}\n\n"
-                document_context += "=" * 50 + "\n\n"
+            for i, doc in enumerate(documents, 1):
+                # Handle both old format (string) and new format (dict with metadata)
+                if isinstance(doc, str):
+                    # Legacy format - just content string
+                    document_context += f"Document {i}:\n{doc}\n\n"
+                    document_context += "=" * 50 + "\n\n"
+                elif isinstance(doc, dict):
+                    # New format with metadata
+                    metadata = doc.get('metadata', {})
+                    content = doc.get('content', '')
+                    
+                    # Create structured document header with metadata
+                    document_context += f"===== DOCUMENT {i} =====\n"
+                    document_context += f"[FILE METADATA]\n"
+                    document_context += f"  • Filename: {metadata.get('original_filename', doc.get('filename', 'Unknown'))}\n"
+                    document_context += f"  • File Type: {metadata.get('file_extension', 'Unknown').upper()}\n"
+                    document_context += f"  • File Size: {metadata.get('file_size_human', 'Unknown')}\n"
+                    document_context += f"  • Upload Time: {metadata.get('upload_timestamp', 'Unknown')}\n"
+                    document_context += f"  • Last Modified: {metadata.get('last_modified', 'Unknown')}\n"
+                    document_context += f"  • Document ID: {doc.get('id', 'Unknown')}\n"
+                    document_context += f"\n[FILE CONTENT]\n"
+                    document_context += f"{content}\n\n"
+                    document_context += "=" * 50 + "\n\n"
             
             enhanced_messages.append({
                 "role": "system",
