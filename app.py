@@ -150,7 +150,7 @@ def index():
             'selected_model': 'large',  # Default model
             'prompt_mode': 'stage1'  # Default prompt mode
         }
-    return render_template('chat_with_prompts.html')
+    return render_template('chat.html')
 
 
 @app.route('/upload', methods=['POST'])

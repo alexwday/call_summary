@@ -12,7 +12,7 @@ from src.call_summary.utils.settings import config
 from src.call_summary.utils.ssl import setup_ssl
 from src.call_summary.connections.oauth_connector import setup_authentication
 from src.call_summary.connections.llm_connector import stream as llm_stream
-from src.call_summary.prompts import get_prompt
+# Prompts removed - using inline basic prompt
 
 logger = get_logger()
 
@@ -52,8 +52,8 @@ def chat_with_documents(
         # Build conversation with system prompt
         enhanced_messages = []
         
-        # Get the appropriate prompt based on mode
-        system_prompt = get_prompt(prompt_mode)
+        # Basic AI assistant prompt
+        system_prompt = "You are a helpful AI assistant who will be analyzing documents that the user provides. When documents are uploaded, you can reference them to answer questions, provide insights, and help the user understand their content."
         
         enhanced_messages.append({
             "role": "system",
