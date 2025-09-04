@@ -33,10 +33,22 @@ app.secret_key = os.environ.get('SECRET_KEY', 'dev-secret-key-change-in-producti
 app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 50MB max file size
 app.config['UPLOAD_FOLDER'] = 'uploads'
 
+# Map of Whisper model sizes to their MLX paths
+WHISPER_MODELS = {
+    'tiny': 'mlx-community/whisper-tiny-mlx',
+    'base': 'mlx-community/whisper-base-mlx',
+    'small': 'mlx-community/whisper-small-mlx',
+    'medium': 'mlx-community/whisper-medium-mlx',
+    'large': 'mlx-community/whisper-large-v3-mlx'
+}
+
+# Default Whisper model - using small for good balance of speed and accuracy
+default_whisper_model = 'small'
+whisper_model_path = WHISPER_MODELS[default_whisper_model]
+
 # Initialize voice models
 print("Loading voice models...")
-print("Loading Whisper Small model...")
-whisper_model_path = "mlx-community/whisper-small-mlx"
+print(f"Loading Whisper models (default: {default_whisper_model})...")
 print("Whisper model ready!")
 
 print("Loading Kokoro 82M model...")
@@ -236,17 +248,63 @@ def upload_document():
         
         logger.info(f"Document uploaded: {filename} for session {session_id}")
         
+        # Calculate token count (approximate)
+        token_count = len(text_content.split())
+        file_size = os.path.getsize(file_path)
+        
         return jsonify({
             'success': True,
+            'id': doc_id,
             'filename': filename,
-            'document_id': doc_id,
+            'size': file_size,
+            'token_count': token_count,
             'message': f'Successfully uploaded {filename}',
-            'document_count': len(SESSIONS[session_id]['documents']),
-            'documents': [{'id': d['id'], 'filename': d['filename']} for d in SESSIONS[session_id]['documents']]
+            'document_count': len(SESSIONS[session_id]['documents'])
         })
         
     except Exception as e:
         logger.error(f"Upload error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/remove_document/<doc_id>', methods=['DELETE'])
+def remove_document(doc_id):
+    """Remove a document from the session."""
+    try:
+        if 'session_id' not in session:
+            return jsonify({'error': 'No session found'}), 400
+        
+        session_id = session['session_id']
+        
+        if session_id not in SESSIONS:
+            return jsonify({'error': 'Session not found'}), 404
+        
+        # Find and remove the document
+        original_count = len(SESSIONS[session_id]['documents'])
+        SESSIONS[session_id]['documents'] = [
+            doc for doc in SESSIONS[session_id]['documents'] 
+            if doc['id'] != doc_id
+        ]
+        
+        if len(SESSIONS[session_id]['documents']) < original_count:
+            # Also try to delete the file
+            for doc in SESSIONS[session_id]['documents']:
+                if doc['id'] == doc_id and 'path' in doc:
+                    try:
+                        os.remove(doc['path'])
+                    except:
+                        pass  # File might already be deleted
+            
+            return jsonify({
+                'success': True,
+                'message': 'Document removed successfully',
+                'document_count': len(SESSIONS[session_id]['documents'])
+            })
+        else:
+            return jsonify({'error': 'Document not found'}), 404
+            
+    except Exception as e:
+        logger.error(f"Remove document error: {e}")
         return jsonify({'error': str(e)}), 500
 
 
@@ -382,9 +440,9 @@ def clear_session():
         return jsonify({'error': str(e)}), 500
 
 
-@app.route('/remove_document', methods=['POST'])
-def remove_document():
-    """Remove a specific document from the session."""
+@app.route('/remove_document_old', methods=['POST'])
+def remove_document_old():
+    """Remove a specific document from the session (old endpoint)."""
     try:
         if 'session_id' not in session:
             return jsonify({'error': 'No session found'}), 400
@@ -540,7 +598,15 @@ def status():
             'session_id': session_id,
             'document_count': len(SESSIONS[session_id]['documents']),
             'message_count': len(SESSIONS[session_id]['messages']),
-            'documents': [{'id': doc['id'], 'filename': doc['filename']} for doc in SESSIONS[session_id]['documents']],
+            'documents': [
+                {
+                    'id': doc['id'],
+                    'filename': doc['filename'],
+                    'size': os.path.getsize(doc['path']) if os.path.exists(doc['path']) else 0,
+                    'token_count': len(doc.get('content', '').split())
+                }
+                for doc in SESSIONS[session_id]['documents']
+            ],
             'selected_model': SESSIONS[session_id].get('selected_model', 'large'),
             'total_tokens': SESSIONS[session_id].get('total_tokens', {'input': 0, 'output': 0}),
             'total_cost': round(SESSIONS[session_id].get('total_cost', 0.0), 4)
@@ -564,6 +630,20 @@ def transcribe_audio():
             return jsonify({"error": "No audio file provided"}), 400
         
         audio_file = request.files['audio']
+        
+        # Get the model parameter from form data
+        model_size = request.form.get('model', default_whisper_model)
+        if model_size not in WHISPER_MODELS:
+            model_size = default_whisper_model
+        
+        # Medium model is now downloaded and available
+        # Large model may still need downloading
+        if model_size == 'large':
+            print(f"Model {model_size} may need downloading, falling back to {default_whisper_model}")
+            model_size = default_whisper_model
+        
+        selected_model_path = WHISPER_MODELS[model_size]
+        print(f"Using Whisper model: {model_size} ({selected_model_path})")
         
         # Check if file is empty
         audio_file.seek(0, os.SEEK_END)
@@ -593,10 +673,10 @@ def transcribe_audio():
                 print("Audio file too small to process")
                 return jsonify({"error": "Audio file too small"}), 400
             
-            # Transcribe the audio
+            # Transcribe the audio with selected model
             result = mlx_whisper.transcribe(
                 temp_path,
-                path_or_hf_repo=whisper_model_path,
+                path_or_hf_repo=selected_model_path,
                 verbose=False
             )
             
@@ -631,18 +711,19 @@ def generate_audio():
     try:
         data = request.json
         text = data.get('text', '')
-        # Accept speed parameter from client, default to 1.27 for slightly faster speech
+        # Accept voice and speed parameters from client
+        voice = data.get('voice', 'af_aoede')
         speed = data.get('speed', 1.27)
         
         if not text:
             return jsonify({"error": "No text provided"}), 400
         
-        print(f"Generating audio for: {text} (speed: {speed})")
+        print(f"Generating audio for: {text} (voice: {voice}, speed: {speed})")
         start_time = time.time()
         
-        # Generate audio using Kokoro
+        # Generate audio using Kokoro with specified voice
         # The pipeline returns a generator of (graphemes, phonemes, audio)
-        result = list(tts_pipeline(text, voice='af_heart', speed=speed))
+        result = list(tts_pipeline(text, voice=voice, speed=speed))
         if result:
             _, _, audio_array = result[0]
         else:

@@ -34,6 +34,7 @@
             display: flex;
             flex-direction: column;
             overflow: hidden;
+            position: relative;
         }
 
         .chat-header {
@@ -43,6 +44,319 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
+            position: relative;
+            z-index: 100;
+        }
+
+        /* Left Sidebar - Settings Menu */
+        .left-sidebar {
+            position: absolute;
+            left: -350px;
+            top: 0;
+            bottom: 0;
+            width: 350px;
+            background: white;
+            box-shadow: 2px 0 10px rgba(0, 0, 0, 0.1);
+            transition: left 0.3s ease;
+            z-index: 90;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .left-sidebar.open {
+            left: 0;
+        }
+
+        .sidebar-header {
+            background: #f8f9fa;
+            padding: 15px 20px;
+            border-bottom: 1px solid #dee2e6;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .sidebar-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: #333;
+        }
+
+        .sidebar-close {
+            background: none;
+            border: none;
+            font-size: 20px;
+            color: #6c757d;
+            cursor: pointer;
+            padding: 0;
+            width: 30px;
+            height: 30px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 5px;
+            transition: background 0.2s;
+        }
+
+        .sidebar-close:hover {
+            background: #e9ecef;
+        }
+
+        .sidebar-content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+        }
+
+        .settings-group {
+            margin-bottom: 25px;
+        }
+
+        .settings-group-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: #495057;
+            margin-bottom: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .setting-item {
+            margin-bottom: 15px;
+        }
+
+        .setting-label {
+            display: block;
+            font-size: 13px;
+            color: #6c757d;
+            margin-bottom: 6px;
+        }
+
+        .setting-select,
+        .setting-range {
+            width: 100%;
+            padding: 8px 12px;
+            border: 1px solid #dee2e6;
+            border-radius: 6px;
+            font-size: 13px;
+            background: white;
+            transition: border-color 0.2s;
+        }
+
+        .setting-select:focus,
+        .setting-range:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .range-value {
+            display: inline-block;
+            margin-left: 10px;
+            font-size: 13px;
+            color: #667eea;
+            font-weight: 500;
+        }
+
+        /* Right Sidebar - Document Manager */
+        .right-sidebar {
+            position: absolute;
+            right: -400px;
+            top: 0;
+            bottom: 0;
+            width: 400px;
+            background: white;
+            box-shadow: -2px 0 10px rgba(0, 0, 0, 0.1);
+            transition: right 0.3s ease;
+            z-index: 90;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .right-sidebar.open {
+            right: 0;
+        }
+
+        .document-grid {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            padding: 20px;
+            overflow-y: auto;
+            flex: 1;
+        }
+
+        .document-tile {
+            background: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 6px;
+            padding: 10px;
+            padding-right: 35px;
+            cursor: pointer;
+            transition: all 0.2s;
+            position: relative;
+            font-size: 12px;
+            min-height: 60px;
+            max-height: 80px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+        
+        .document-remove-btn {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            width: 20px;
+            height: 20px;
+            background: #dc3545;
+            color: white;
+            border: none;
+            border-radius: 50%;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            line-height: 1;
+            transition: all 0.2s;
+            z-index: 2;
+            opacity: 0.8;
+        }
+        
+        .document-remove-btn:hover {
+            background: #c82333;
+            transform: scale(1.1);
+        }
+
+        .document-tile:hover {
+            border-color: #667eea;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 10px rgba(102, 126, 234, 0.1);
+        }
+
+        .document-tile.selected {
+            background: #e7f5ff;
+            border-color: #667eea;
+        }
+
+        .document-tile.selected {
+            background: #e7f5ff;
+            border-color: #667eea;
+        }
+        
+        .document-checkmark {
+            position: absolute;
+            top: 8px;
+            right: 35px;
+            background: #667eea;
+            color: white;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+        }
+        
+        .document-tile.selected .document-checkmark {
+            display: flex;
+        }
+
+        .document-name {
+            font-size: 13px;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 6px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            padding-right: 25px;
+        }
+
+        .document-meta {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            font-size: 11px;
+            color: #6c757d;
+        }
+
+        .document-meta-item {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .upload-section-sidebar {
+            padding: 20px;
+            border-bottom: 1px solid #dee2e6;
+        }
+
+        .upload-button-full {
+            width: 100%;
+            padding: 12px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .upload-button-full:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4);
+        }
+
+        /* Toggle buttons for sidebars */
+        .sidebar-toggle {
+            position: absolute;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 40px;
+            height: 80px;
+            background: white;
+            border: 1px solid #dee2e6;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
+            z-index: 91;
+            font-size: 18px;
+            color: #6c757d;
+        }
+
+        .sidebar-toggle:hover {
+            background: #f8f9fa;
+            color: #667eea;
+        }
+
+        .sidebar-toggle.left {
+            left: 0;
+            border-radius: 0 8px 8px 0;
+            border-left: none;
+        }
+
+        .sidebar-toggle.right {
+            right: 0;
+            border-radius: 8px 0 0 8px;
+            border-right: none;
+        }
+
+        .sidebar-toggle.left.active {
+            left: 350px;
+        }
+
+        .sidebar-toggle.right.active {
+            right: 400px;
         }
 
         .chat-header h1 {
@@ -52,8 +366,9 @@
 
         .header-controls {
             display: flex;
-            gap: 15px;
+            gap: 10px;
             align-items: center;
+            font-size: 12px;
         }
 
         .voice-mode-toggle {
@@ -105,24 +420,7 @@
         }
 
         .model-selector {
-            display: flex;
-            gap: 10px;
-            align-items: center;
-        }
-
-        .model-selector label {
-            font-size: 13px;
-            font-weight: 500;
-        }
-
-        .model-selector select {
-            padding: 5px 10px;
-            border-radius: 5px;
-            border: none;
-            font-size: 13px;
-            cursor: pointer;
-            background: white;
-            color: #333;
+            display: none;
         }
 
         .status-info {
@@ -471,6 +769,10 @@
             font-weight: 500;
             font-size: 13px;
             transition: all 0.3s ease;
+            height: 42px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
 
         #sendButton:hover:not(:disabled) {
@@ -523,60 +825,117 @@
         }
 
         .upload-section {
-            margin-bottom: 15px;
-            padding: 10px;
-            background: #f8f9fa;
-            border-radius: 8px;
-        }
-
-        .upload-label {
-            display: inline-block;
-            padding: 8px 16px;
-            background: #667eea;
-            color: white;
-            border-radius: 5px;
-            cursor: pointer;
-            font-size: 14px;
-            transition: all 0.3s ease;
-        }
-
-        .upload-label:hover {
-            background: #5568d3;
-        }
-
-        #fileUpload {
             display: none;
-        }
-
-        .uploaded-files {
-            margin-top: 10px;
-            display: flex;
-            flex-wrap: wrap;
-            gap: 8px;
-        }
-
-        .file-tag {
-            display: inline-flex;
-            align-items: center;
-            gap: 5px;
-            padding: 5px 10px;
-            background: white;
-            border: 1px solid #e9ecef;
-            border-radius: 15px;
-            font-size: 12px;
-            color: #495057;
-        }
-
-        .file-remove {
-            cursor: pointer;
-            color: #dc3545;
-            font-weight: bold;
-            margin-left: 5px;
         }
     </style>
 </head>
 <body>
     <div class="chat-container">
+        <!-- Left Sidebar Toggle -->
+        <button class="sidebar-toggle left" id="leftSidebarToggle" title="Settings">
+            ⚙️
+        </button>
+
+        <!-- Right Sidebar Toggle -->
+        <button class="sidebar-toggle right" id="rightSidebarToggle" title="Documents">
+            📁
+        </button>
+
+        <!-- Left Sidebar - Settings -->
+        <div class="left-sidebar" id="leftSidebar">
+            <div class="sidebar-header">
+                <span class="sidebar-title">Settings</span>
+                <button class="sidebar-close" id="leftSidebarClose">×</button>
+            </div>
+            <div class="sidebar-content">
+                <!-- Model Settings -->
+                <div class="settings-group">
+                    <div class="settings-group-title">Model Settings</div>
+                    <div class="setting-item">
+                        <label class="setting-label">Model Size</label>
+                        <select class="setting-select" id="modelSelectSidebar">
+                            <option value="small">Small (Fast)</option>
+                            <option value="medium">Medium (Balanced)</option>
+                            <option value="large" selected>Large (Best)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- TTS Settings -->
+                <div class="settings-group">
+                    <div class="settings-group-title">Text-to-Speech (TTS)</div>
+                    <div class="setting-item">
+                        <label class="setting-label">Voice</label>
+                        <select class="setting-select" id="ttsVoice">
+                            <optgroup label="Female Voices">
+                                <option value="af_heart">Heart</option>
+                                <option value="af_alloy">Alloy</option>
+                                <option value="af_aoede" selected>Aoede</option>
+                                <option value="af_bella">Bella</option>
+                                <option value="af_jessica">Jessica</option>
+                                <option value="af_kore">Kore</option>
+                                <option value="af_nicole">Nicole</option>
+                                <option value="af_nova">Nova</option>
+                                <option value="af_river">River</option>
+                                <option value="af_sarah">Sarah</option>
+                                <option value="af_sky">Sky</option>
+                            </optgroup>
+                            <optgroup label="Male Voices">
+                                <option value="am_adam">Adam</option>
+                                <option value="am_echo">Echo</option>
+                                <option value="am_eric">Eric</option>
+                                <option value="am_fenrir">Fenrir</option>
+                                <option value="am_liam">Liam</option>
+                                <option value="am_michael">Michael</option>
+                                <option value="am_onyx">Onyx</option>
+                                <option value="am_puck">Puck</option>
+                                <option value="am_santa">Santa</option>
+                            </optgroup>
+                        </select>
+                    </div>
+                    <div class="setting-item">
+                        <label class="setting-label">
+                            Speed
+                            <span class="range-value" id="ttsSpeedValue">1.3x</span>
+                        </label>
+                        <input type="range" class="setting-range" id="ttsSpeed" 
+                               min="0.5" max="2.0" step="0.1" value="1.27">
+                    </div>
+                </div>
+
+                <!-- STT Settings -->
+                <div class="settings-group">
+                    <div class="settings-group-title">Speech-to-Text (STT)</div>
+                    <div class="setting-item">
+                        <label class="setting-label">Whisper Model Size</label>
+                        <select class="setting-select" id="sttModel">
+                            <option value="tiny">Tiny (Fastest)</option>
+                            <option value="base">Base (Fast & Good)</option>
+                            <option value="small" selected>Small (Better)</option>
+                            <option value="medium">Medium (Best)</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Sidebar - Documents -->
+        <div class="right-sidebar" id="rightSidebar">
+            <div class="sidebar-header">
+                <span class="sidebar-title">Documents</span>
+                <button class="sidebar-close" id="rightSidebarClose">×</button>
+            </div>
+            <div class="upload-section-sidebar">
+                <label for="fileUploadSidebar" class="upload-button-full">
+                    <span>📎</span>
+                    <span>Upload Documents</span>
+                </label>
+                <input type="file" id="fileUploadSidebar" accept=".pdf,.doc,.docx,.txt" multiple style="display: none;">
+            </div>
+            <div class="document-grid" id="documentGrid">
+                <!-- Document tiles will be added here dynamically -->
+            </div>
+        </div>
         <div class="chat-header">
             <h1>Chat+</h1>
             <div class="header-controls">
@@ -614,13 +973,6 @@
         <div class="chat-messages" id="chatMessages"></div>
 
         <div class="chat-input-area">
-            <div class="upload-section">
-                <label for="fileUpload" class="upload-label">
-                    📎 Upload Documents
-                </label>
-                <input type="file" id="fileUpload" accept=".pdf,.doc,.docx,.txt" multiple>
-                <div class="uploaded-files" id="uploadedFiles"></div>
-            </div>
             
             <div class="recording-indicator" id="recordingIndicator">
                 <div class="recording-dot"></div>
@@ -662,6 +1014,9 @@
         let currentAudio = null;
         let streamController = null;
         let uploadedDocuments = [];
+        let selectedDocuments = new Set();
+        let ttsSettings = { voice: 'af_aoede', speed: 1.27 };
+        let sttModel = 'small';
 
         const chatMessages = document.getElementById('chatMessages');
         const messageInput = document.getElementById('messageInput');
@@ -671,15 +1026,76 @@
         const recordButton = document.getElementById('recordButton');
         const recordingIndicator = document.getElementById('recordingIndicator');
         const audioQueueEl = document.getElementById('audioQueue');
-        const modelSelect = document.getElementById('modelSelect');
-        const fileUpload = document.getElementById('fileUpload');
-        const uploadedFiles = document.getElementById('uploadedFiles');
+        const modelSelect = document.getElementById('modelSelectSidebar');
+        const fileUpload = document.getElementById('fileUploadSidebar');
         const docCount = document.getElementById('docCount');
         const tokenCount = document.getElementById('tokenCount');
         const costCount = document.getElementById('costCount');
+        
+        // Sidebar elements
+        const leftSidebar = document.getElementById('leftSidebar');
+        const rightSidebar = document.getElementById('rightSidebar');
+        const leftSidebarToggle = document.getElementById('leftSidebarToggle');
+        const rightSidebarToggle = document.getElementById('rightSidebarToggle');
+        const leftSidebarClose = document.getElementById('leftSidebarClose');
+        const rightSidebarClose = document.getElementById('rightSidebarClose');
+        const documentGrid = document.getElementById('documentGrid');
+        
+        // Settings elements
+        const ttsVoice = document.getElementById('ttsVoice');
+        const ttsSpeed = document.getElementById('ttsSpeed');
+        const ttsSpeedValue = document.getElementById('ttsSpeedValue');
+        const sttModelSelect = document.getElementById('sttModel');
 
         // Initialize audio recording on page load
         initializeAudioRecording();
+        
+        // Sidebar toggle handlers
+        leftSidebarToggle.addEventListener('click', () => {
+            leftSidebar.classList.toggle('open');
+            leftSidebarToggle.classList.toggle('active');
+            if (rightSidebar.classList.contains('open')) {
+                rightSidebar.classList.remove('open');
+                rightSidebarToggle.classList.remove('active');
+            }
+        });
+        
+        rightSidebarToggle.addEventListener('click', () => {
+            rightSidebar.classList.toggle('open');
+            rightSidebarToggle.classList.toggle('active');
+            if (leftSidebar.classList.contains('open')) {
+                leftSidebar.classList.remove('open');
+                leftSidebarToggle.classList.remove('active');
+            }
+        });
+        
+        leftSidebarClose.addEventListener('click', () => {
+            leftSidebar.classList.remove('open');
+            leftSidebarToggle.classList.remove('active');
+        });
+        
+        rightSidebarClose.addEventListener('click', () => {
+            rightSidebar.classList.remove('open');
+            rightSidebarToggle.classList.remove('active');
+        });
+        
+        // Settings handlers
+        ttsVoice.addEventListener('change', (e) => {
+            ttsSettings.voice = e.target.value;
+        });
+        
+        ttsSpeed.addEventListener('input', (e) => {
+            ttsSettings.speed = parseFloat(e.target.value);
+            ttsSpeedValue.textContent = `${ttsSettings.speed.toFixed(1)}x`;
+        });
+        
+        sttModelSelect.addEventListener('change', (e) => {
+            sttModel = e.target.value;
+        });
+        
+        modelSelect.addEventListener('change', (e) => {
+            // Model select handler remains the same
+        });
 
         // Voice response toggle (only controls TTS playback)
         voiceModeToggle.addEventListener('click', () => {
@@ -758,6 +1174,7 @@
         async function sendAudioForTranscription(audioBlob) {
             const formData = new FormData();
             formData.append('audio', audioBlob, 'recording.webm');
+            formData.append('model', sttModel);  // Include STT model choice
             
             try {
                 console.log('Sending audio for transcription...');
@@ -838,7 +1255,8 @@
                         message: text,
                         model: model,
                         stream: true,
-                        voice_mode: isVoiceResponseEnabled
+                        voice_mode: isVoiceResponseEnabled,
+                        selected_documents: Array.from(selectedDocuments)
                     }),
                     signal: streamController.signal
                 });
@@ -932,7 +1350,11 @@
                     headers: {
                         'Content-Type': 'application/json',
                     },
-                    body: JSON.stringify({ text })
+                    body: JSON.stringify({ 
+                        text,
+                        voice: ttsSettings.voice,
+                        speed: ttsSettings.speed
+                    })
                 });
                 
                 if (!response.ok) throw new Error('Failed to generate audio');
@@ -1033,9 +1455,20 @@
                 if (!response.ok) throw new Error('Upload failed');
                 
                 const result = await response.json();
-                uploadedDocuments.push(result);
-                displayUploadedFiles();
-                fetchStatus();
+                if (result.success) {
+                    // Add the new document with proper structure
+                    uploadedDocuments.push({
+                        id: result.id,
+                        filename: result.filename,
+                        size: result.size,
+                        token_count: result.token_count
+                    });
+                    // Auto-select the new document
+                    selectedDocuments.add(result.id);
+                    displayUploadedFiles();
+                    updateSelectedDocumentCount();
+                    fetchStatus();
+                }
             } catch (error) {
                 console.error('Error uploading file:', error);
                 alert(`Failed to upload ${file.name}`);
@@ -1043,22 +1476,102 @@
         }
 
         function displayUploadedFiles() {
-            uploadedFiles.innerHTML = '';
+            documentGrid.innerHTML = '';
+            
+            if (uploadedDocuments.length === 0) {
+                documentGrid.innerHTML = '<div style="padding: 20px; text-align: center; color: #6c757d;">No documents uploaded yet</div>';
+                return;
+            }
+            
             uploadedDocuments.forEach(doc => {
-                const tag = document.createElement('div');
-                tag.className = 'file-tag';
-                tag.innerHTML = `
-                    ${doc.filename}
-                    <span class="file-remove" onclick="removeFile('${doc.id}')">×</span>
+                const tile = document.createElement('div');
+                tile.className = 'document-tile';
+                if (selectedDocuments.has(doc.id)) {
+                    tile.classList.add('selected');
+                }
+                
+                // Format file size
+                const sizeInMB = doc.size ? (doc.size / (1024 * 1024)).toFixed(2) : '0';
+                const fileType = doc.filename.split('.').pop().toUpperCase();
+                
+                tile.innerHTML = `
+                    <button class="document-remove-btn" title="Remove document">×</button>
+                    <div class="document-checkmark">✓</div>
+                    <div class="document-name" title="${doc.filename}">${doc.filename}</div>
+                    <div class="document-meta">
+                        <div class="document-meta-item">
+                            <span>📄</span>
+                            <span>${fileType}</span>
+                        </div>
+                        <div class="document-meta-item">
+                            <span>💾</span>
+                            <span>${sizeInMB} MB</span>
+                        </div>
+                        <div class="document-meta-item">
+                            <span>🔤</span>
+                            <span>${doc.token_count || 0} tokens</span>
+                        </div>
+                    </div>
                 `;
-                uploadedFiles.appendChild(tag);
+                
+                // Handle tile click for selection
+                tile.addEventListener('click', (e) => {
+                    // Don't toggle selection if clicking the remove button
+                    if (!e.target.classList.contains('document-remove-btn')) {
+                        if (selectedDocuments.has(doc.id)) {
+                            selectedDocuments.delete(doc.id);
+                            tile.classList.remove('selected');
+                        } else {
+                            selectedDocuments.add(doc.id);
+                            tile.classList.add('selected');
+                        }
+                        updateSelectedDocumentCount();
+                    }
+                });
+                
+                // Handle remove button click
+                const removeBtn = tile.querySelector('.document-remove-btn');
+                removeBtn.addEventListener('click', async (e) => {
+                    e.stopPropagation();
+                    if (confirm(`Remove "${doc.filename}"?`)) {
+                        await removeFile(doc.id);
+                    }
+                });
+                
+                documentGrid.appendChild(tile);
             });
         }
 
-        function removeFile(fileId) {
-            uploadedDocuments = uploadedDocuments.filter(doc => doc.id !== fileId);
-            displayUploadedFiles();
-            // TODO: Send remove request to server
+        function updateSelectedDocumentCount() {
+            // Update the document count to show selected/total
+            const selectedCount = selectedDocuments.size;
+            const totalCount = uploadedDocuments.length;
+            if (selectedCount > 0) {
+                docCount.textContent = `${selectedCount}/${totalCount}`;
+            } else {
+                docCount.textContent = totalCount.toString();
+            }
+        }
+
+        async function removeFile(fileId) {
+            try {
+                const response = await fetch(`/remove_document/${fileId}`, {
+                    method: 'DELETE'
+                });
+                
+                if (response.ok) {
+                    uploadedDocuments = uploadedDocuments.filter(doc => doc.id !== fileId);
+                    selectedDocuments.delete(fileId);
+                    displayUploadedFiles();
+                    updateSelectedDocumentCount();
+                    fetchStatus();
+                } else {
+                    alert('Failed to remove document');
+                }
+            } catch (error) {
+                console.error('Error removing document:', error);
+                alert('Failed to remove document');
+            }
         }
 
         async function fetchStatus() {
@@ -1076,7 +1589,12 @@
                     // Update uploaded documents
                     if (status.documents) {
                         uploadedDocuments = status.documents;
+                        // Auto-select all documents by default
+                        if (selectedDocuments.size === 0 && uploadedDocuments.length > 0) {
+                            uploadedDocuments.forEach(doc => selectedDocuments.add(doc.id));
+                        }
                         displayUploadedFiles();
+                        updateSelectedDocumentCount();
                     }
                 }
             } catch (error) {
