@@ -19,6 +19,44 @@ import time
 import io
 import soundfile as sf
 import numpy as np
+import ssl
+import urllib.request
+
+# Configure SSL for model downloads
+def configure_ssl():
+    """Configure SSL settings based on environment."""
+    ssl_verify = os.environ.get('SSL_VERIFY', 'true').lower() == 'true'
+    ssl_cert_file = os.environ.get('SSL_CERT_FILE', 'rbc-ca-bundle.cer')
+    
+    if ssl_verify and os.path.exists(ssl_cert_file):
+        print(f"🔒 Using SSL certificate: {ssl_cert_file}")
+        # Create SSL context with corporate certificate
+        ssl_context = ssl.create_default_context(cafile=ssl_cert_file)
+        # Set as default for urllib
+        urllib.request.install_opener(urllib.request.build_opener(
+            urllib.request.HTTPSHandler(context=ssl_context)))
+        # Set for requests library
+        os.environ['REQUESTS_CA_BUNDLE'] = ssl_cert_file
+        return ssl_context
+    elif not ssl_verify:
+        print("⚠️  SSL verification disabled (development mode)")
+        # Create unverified context
+        ssl_context = ssl.create_default_context()
+        ssl_context.check_hostname = False
+        ssl_context.verify_mode = ssl.CERT_NONE
+        # Set as default for urllib
+        urllib.request.install_opener(urllib.request.build_opener(
+            urllib.request.HTTPSHandler(context=ssl_context)))
+        # Disable for requests
+        os.environ['CURL_CA_BUNDLE'] = ""
+        os.environ['REQUESTS_CA_BUNDLE'] = ""
+        return ssl_context
+    else:
+        print("✓ Using system default SSL settings")
+        return None
+
+# Configure SSL before importing ML models
+ssl_context = configure_ssl()
 
 # Import ML models for voice capabilities
 import mlx_whisper
