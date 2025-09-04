@@ -1,11 +1,12 @@
 """
-Flask web application for document chatbot.
+Flask web application for document chatbot with integrated STT and TTS.
 """
 
 import os
 import uuid
 from datetime import datetime
 from flask import Flask, render_template, request, jsonify, Response, session
+from flask_cors import CORS
 from werkzeug.utils import secure_filename
 import docx
 import PyPDF2
@@ -13,13 +14,37 @@ from pathlib import Path
 from src.call_summary.main import model
 from src.call_summary.utils.logging import get_logger
 from src.call_summary.utils.settings import config
+import tempfile
+import time
+import io
+import soundfile as sf
+import numpy as np
+
+# Import ML models for voice capabilities
+import mlx_whisper
+from mlx_audio.tts.models.kokoro import KokoroPipeline
+from mlx_audio.tts.utils import load_model
 
 logger = get_logger()
 
 app = Flask(__name__)
+CORS(app)
 app.secret_key = os.environ.get('SECRET_KEY', 'dev-secret-key-change-in-production')
 app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 50MB max file size
 app.config['UPLOAD_FOLDER'] = 'uploads'
+
+# Initialize voice models
+print("Loading voice models...")
+print("Loading Whisper Small model...")
+whisper_model_path = "mlx-community/whisper-small-mlx"
+print("Whisper model ready!")
+
+print("Loading Kokoro 82M model...")
+tts_model_id = 'mlx-community/Kokoro-82M-4bit'
+tts_model = load_model(tts_model_id)
+tts_pipeline = KokoroPipeline(lang_code='a', model=tts_model, repo_id=tts_model_id)
+print("Kokoro TTS model ready!")
+print("All voice models loaded successfully!")
 
 # Allowed file extensions
 ALLOWED_EXTENSIONS = {'pdf', 'docx', 'doc', 'txt'}
@@ -526,5 +551,148 @@ def status():
         return jsonify({'error': str(e)}), 500
 
 
+# ====================
+# Voice API Endpoints 
+# ====================
+
+@app.route('/transcribe', methods=['POST'])
+def transcribe_audio():
+    """Transcribe audio using Whisper STT."""
+    try:
+        # Check if audio file is in the request
+        if 'audio' not in request.files:
+            return jsonify({"error": "No audio file provided"}), 400
+        
+        audio_file = request.files['audio']
+        
+        # Check if file is empty
+        audio_file.seek(0, os.SEEK_END)
+        file_size = audio_file.tell()
+        audio_file.seek(0)
+        
+        if file_size == 0:
+            print("Received empty audio file")
+            return jsonify({"error": "Audio file is empty"}), 400
+        
+        print(f"Received audio file, size: {file_size} bytes")
+        
+        # Save the uploaded file temporarily
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.webm') as tmp_file:
+            audio_file.save(tmp_file.name)
+            temp_path = tmp_file.name
+        
+        try:
+            print(f"Transcribing audio file: {temp_path}")
+            start_time = time.time()
+            
+            # Check file size on disk
+            disk_size = os.path.getsize(temp_path)
+            print(f"Saved file size: {disk_size} bytes")
+            
+            if disk_size < 100:  # Too small to be valid audio
+                print("Audio file too small to process")
+                return jsonify({"error": "Audio file too small"}), 400
+            
+            # Transcribe the audio
+            result = mlx_whisper.transcribe(
+                temp_path,
+                path_or_hf_repo=whisper_model_path,
+                verbose=False
+            )
+            
+            transcription = result["text"].strip()
+            
+            transcription_time = time.time() - start_time
+            print(f"Transcription complete in {transcription_time:.2f}s: {transcription}")
+            
+            if not transcription:
+                return jsonify({"error": "No speech detected"}), 400
+            
+            return jsonify({
+                "text": transcription,
+                "time": transcription_time
+            })
+            
+        finally:
+            # Clean up temporary file
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
+        
+    except Exception as e:
+        print(f"Error transcribing audio: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/generate', methods=['POST'])
+def generate_audio():
+    """Generate audio using Kokoro TTS."""
+    try:
+        data = request.json
+        text = data.get('text', '')
+        # Accept speed parameter from client, default to 1.27 for slightly faster speech
+        speed = data.get('speed', 1.27)
+        
+        if not text:
+            return jsonify({"error": "No text provided"}), 400
+        
+        print(f"Generating audio for: {text} (speed: {speed})")
+        start_time = time.time()
+        
+        # Generate audio using Kokoro
+        # The pipeline returns a generator of (graphemes, phonemes, audio)
+        result = list(tts_pipeline(text, voice='af_heart', speed=speed))
+        if result:
+            _, _, audio_array = result[0]
+        else:
+            raise ValueError("No audio generated")
+        
+        # Convert to numpy array if needed
+        if hasattr(audio_array, 'numpy'):
+            audio_array = audio_array.numpy()
+        
+        # Ensure audio is in the right format (float32, -1 to 1 range)
+        audio_array = np.array(audio_array, dtype=np.float32)
+        
+        # If audio is 2D, take the first channel
+        if len(audio_array.shape) > 1:
+            audio_array = audio_array[0]
+        
+        # Normalize if needed
+        max_val = np.max(np.abs(audio_array))
+        if max_val > 1.0:
+            audio_array = audio_array / max_val
+        
+        generation_time = time.time() - start_time
+        print(f"Audio generated in {generation_time:.2f} seconds")
+        
+        # Convert to WAV bytes
+        buffer = io.BytesIO()
+        sf.write(buffer, audio_array, samplerate=24000, format='WAV')
+        buffer.seek(0)
+        
+        return Response(
+            buffer.getvalue(),
+            mimetype='audio/wav',
+            headers={
+                'Content-Disposition': 'inline; filename="output.wav"',
+                'X-Generation-Time': str(generation_time)
+            }
+        )
+        
+    except Exception as e:
+        print(f"Error generating audio: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+
 if __name__ == '__main__':
+    print("\n" + "="*50)
+    print("✅ Unified Chat+ Voice Server Starting")
+    print("="*50)
+    print("\n🌐 Access the application at:")
+    print("   Regular chat: http://localhost:5003")
+    print("   Voice chat:   http://localhost:5003?voice=true")
+    print("\n✨ All voice capabilities integrated into single server!")
+    print("="*50 + "\n")
     app.run(debug=True, port=5003)

@@ -761,7 +761,7 @@
             
             try {
                 console.log('Sending audio for transcription...');
-                const response = await fetch('http://127.0.0.1:5002/transcribe', {
+                const response = await fetch('/transcribe', {
                     method: 'POST',
                     body: formData
                 });
@@ -927,7 +927,7 @@
             
             try {
                 console.log('Generating audio for:', text);
-                const response = await fetch('http://127.0.0.1:5001/generate', {
+                const response = await fetch('/generate', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
