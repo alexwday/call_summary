@@ -150,6 +150,7 @@ def index():
             'selected_model': 'large',  # Default model
             'prompt_mode': 'stage1'  # Default prompt mode
         }
+    
     return render_template('chat.html')
 
 
@@ -246,7 +247,9 @@ def chat():
         data = request.json
         message = data.get('message', '')
         selected_model = data.get('model', SESSIONS[session_id].get('selected_model', 'large'))
-        prompt_mode = data.get('prompt_mode', SESSIONS[session_id].get('prompt_mode', 'stage1'))
+        is_voice_mode = data.get('voice_mode', False)
+        # Use 'voice' or 'text' prompt mode based on voice_mode flag
+        prompt_mode = 'voice' if is_voice_mode else 'text'
         
         if not message:
             return jsonify({'error': 'No message provided'}), 400
@@ -281,10 +284,9 @@ def chat():
                 if chunk.get('type') == 'assistant':
                     content = chunk.get('content', '')
                     assistant_message += content
-                    # Escape the content properly for SSE
-                    # SSE lines cannot contain newlines, they must be escaped or sent as separate events
-                    escaped_content = content.replace('\n', '\\n').replace('\r', '\\r')
-                    yield f"data: {escaped_content}\n\n"
+                    # Send as JSON for the frontend to parse
+                    import json
+                    yield f"data: {json.dumps({'content': content})}\n\n"
                 elif chunk.get('type') == 'error':
                     yield f"data: ERROR: {chunk.get('content', 'Unknown error')}\n\n"
                 elif chunk.get('type') == 'usage':
@@ -525,4 +527,4 @@ def status():
 
 
 if __name__ == '__main__':
-    app.run(debug=True, port=5001)
+    app.run(debug=True, port=5003)
