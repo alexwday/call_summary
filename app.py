@@ -308,6 +308,25 @@ def remove_document(doc_id):
         return jsonify({'error': str(e)}), 500
 
 
+@app.route('/clear-messages', methods=['POST'])
+def clear_messages():
+    """Clear chat messages from session."""
+    try:
+        if 'session_id' not in session:
+            return jsonify({'error': 'No session found'}), 400
+        
+        session_id = session['session_id']
+        if session_id in SESSIONS:
+            SESSIONS[session_id]['messages'] = []
+            logger.info(f"Cleared messages for session {session_id}")
+            return jsonify({'success': True, 'message': 'Chat cleared'})
+        else:
+            return jsonify({'error': 'Session not found'}), 404
+    except Exception as e:
+        logger.error(f"Clear messages error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
 @app.route('/chat', methods=['POST'])
 def chat():
     """Handle chat messages."""

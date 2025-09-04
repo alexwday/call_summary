@@ -1,29 +1,57 @@
-# Chat+
+# Chat+ with Voice
 
-A powerful document-aware chat application with multi-model support, cost tracking, and real-time streaming responses.
+A powerful document-aware chat application with multi-model support, voice interaction (STT/TTS), cost tracking, and real-time streaming responses.
 
 ## Features
 
 - 📄 **Multi-Document Support**: Upload and manage multiple PDF, Word, and text documents
 - 🤖 **Multi-Model Selection**: Switch between Small, Medium, and Large language models  
+- 🎤 **Voice Input**: Record questions using built-in Speech-to-Text (Whisper)
+- 🔊 **Voice Responses**: Natural Text-to-Speech with sentence highlighting (Kokoro)
 - 💰 **Cost & Token Tracking**: Real-time tracking of API usage and costs
 - 🔄 **Streaming Responses**: Real-time streaming with proper markdown rendering
 - 📝 **Multi-line Input**: Support for multi-line messages (Shift+Enter for new line)
 - 🗑️ **Document Management**: Individual document removal and session clearing
-- 🎨 **Clean UI**: Modern, responsive interface with reduced font size for better readability
+- 🎨 **Clean UI**: Modern, responsive interface with voice mode toggle
+
+## Requirements
+
+- **Python 3.12** (specifically required - not 3.11 or 3.13)
+- macOS with Apple Silicon (M1/M2/M3) for optimal MLX performance
+- OpenAI API key for LLM functionality
 
 ## Setup
 
-1. **Clone the repository**:
+### Quick Setup (Recommended)
+
+1. **Clone and setup**:
 ```bash
 git clone https://github.com/alexwday/call_summary.git
 cd call_summary
+./setup.sh  # Automated setup script for Python 3.12
 ```
 
-2. **Create virtual environment**:
+### Manual Setup
+
+1. **Install Python 3.12**:
 ```bash
-python -m venv venv
+# macOS (Homebrew)
+brew install python@3.12
+
+# Ubuntu/Debian
+sudo apt install python3.12 python3.12-venv
+
+# Verify installation
+python3.12 --version  # Should show Python 3.12.x
+```
+
+2. **Create virtual environment with Python 3.12**:
+```bash
+python3.12 -m venv venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
+
+# Verify Python version in venv
+python --version  # Must show Python 3.12.x
 ```
 
 3. **Install dependencies**:
@@ -45,7 +73,8 @@ python app.py
 ```
 
 6. **Open in browser**:
-Navigate to `http://localhost:5001`
+- Regular Chat: `http://localhost:5003`
+- Voice Mode: `http://localhost:5003?voice=true`
 
 ## Usage
 
@@ -53,6 +82,12 @@ Navigate to `http://localhost:5001`
 1. Type your message in the input field
 2. Press Enter to send (or Shift+Enter for new line)
 3. Watch the response stream in real-time
+
+### Voice Mode
+1. Enable "Voice Responses" toggle in the header
+2. Hold the microphone button to record your question
+3. Release to transcribe and send
+4. Listen to AI responses with synchronized sentence highlighting
 
 ### Document Upload
 1. Click "📎 Upload Documents" to select files
@@ -158,6 +193,34 @@ The project uses utilities and connections from the Aegis project:
 - LLM connections (OpenAI)
 - Logging and configuration
 - SSL support
+
+## Troubleshooting
+
+### Python Version Issues
+If you encounter Python version conflicts:
+```bash
+# Check current Python version
+python --version
+
+# If not 3.12, remove existing venv
+rm -rf venv
+
+# Recreate with Python 3.12
+python3.12 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+```
+
+### MLX Installation Issues
+If MLX modules fail to install on non-Apple Silicon:
+- MLX is optimized for Apple Silicon (M1/M2/M3)
+- On Intel Macs or Linux, voice features may have reduced performance
+
+### Quick Python 3.12 Check
+Run this to verify your setup:
+```bash
+./setup.sh  # This will check and configure Python 3.12 automatically
+```
 
 ## License
 
