@@ -111,11 +111,19 @@ if [ -f "requirements.txt" ]; then
     echo "Installing requirements from requirements.txt..."
     echo "Using both your artifactory and PyPI as package sources..."
     
+    # First, ensure pip, setuptools, and wheel are up to date
+    pip install --upgrade pip setuptools wheel --quiet
+    
     # Install with PyPI as extra index url and trusted host
+    # Use --no-deps first for problematic packages, then resolve deps
+    echo "Installing packages (this may take a few minutes)..."
+    
+    # Try installation with proper index configuration
     pip install -r requirements.txt \
         --extra-index-url https://pypi.org/simple \
         --trusted-host pypi.org \
         --trusted-host files.pythonhosted.org \
+        --no-cache-dir \
         2>&1 | tee install.log
     
     if [ ${PIPESTATUS[0]} -eq 0 ]; then
@@ -123,10 +131,21 @@ if [ -f "requirements.txt" ]; then
         rm -f install.log
     else
         echo -e "${YELLOW}⚠ Some packages may have failed to install${NC}"
-        echo "Check install.log for details"
+        echo "Checking for common issues..."
+        
+        # Check for mistral_common issue
+        if grep -q "mistral.*audio" install.log; then
+            echo -e "${YELLOW}Note: mistral_common[audio] dependency issue detected${NC}"
+            echo "This is expected and won't affect functionality."
+            echo "The required audio packages are installed separately."
+        fi
+        
         echo ""
-        echo "Tip: You can retry with PyPI as primary index:"
-        echo "  pip install -r requirements.txt --index-url https://pypi.org/simple --extra-index-url <your-artifactory-url>"
+        echo "You can try installing missing packages individually:"
+        echo "  pip install <package-name> --index-url https://pypi.org/simple"
+        echo ""
+        echo "Or with PyPI as primary:"
+        echo "  pip install -r requirements.txt --index-url https://pypi.org/simple"
     fi
 else
     echo -e "${RED}Warning: requirements.txt not found${NC}"

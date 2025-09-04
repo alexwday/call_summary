@@ -1,29 +1,35 @@
 # Core dependencies
 flask==3.1.2
 flask-cors==6.0.1
-python-docx==1.1.0
+python-docx==1.2.0
 PyPDF2==3.0.1
-python-dotenv==1.0.0
+python-dotenv==1.1.1
 python-multipart==0.0.20
 werkzeug==3.1.3
 
 # LLM and API
-openai==1.3.5
-requests==2.31.0
+openai==1.105.0
+requests==2.32.5
 
-# MLX AI models
-mlx-lm>=0.27.0
-mlx-audio>=0.2.5
-mlx-whisper>=0.4.3
+# MLX AI models (Apple Silicon optimized)
+# Note: These are specifically for M1/M2/M3/M4 Macs
+mlx==0.29.0
+mlx-lm==0.27.0
+mlx-audio==0.2.5
+mlx-whisper==0.4.3
 
 # Audio processing
-soundfile>=0.13.0
-sounddevice>=0.5.0
-numpy>=2.0.0
+soundfile==0.13.1
+sounddevice==0.5.2
+numpy==2.2.6
+audioread==3.0.1
 
 # Utilities
-structlog==23.2.0
+structlog==25.4.0
 colorama==0.4.6
-pydantic==2.5.2
-pydantic-settings==2.1.0
+pydantic==2.11.7
+pydantic-settings==2.10.1
 pyyaml>=6.0.0
+
+# Note: Do NOT include mistral_common[audio] as it causes dependency loops
+# The MLX packages above provide all necessary audio functionality
