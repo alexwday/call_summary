@@ -103,11 +103,31 @@ source venv/bin/activate
 echo "Upgrading pip..."
 pip install --upgrade pip >/dev/null 2>&1
 
-# Install requirements
+# Add PyPI as an additional trusted source alongside any existing artifactory
+echo "Adding PyPI as additional package source..."
+
+# Install requirements with PyPI as extra index
 if [ -f "requirements.txt" ]; then
     echo "Installing requirements from requirements.txt..."
-    pip install -r requirements.txt
-    echo -e "${GREEN}✓ Dependencies installed${NC}"
+    echo "Using both your artifactory and PyPI as package sources..."
+    
+    # Install with PyPI as extra index url and trusted host
+    pip install -r requirements.txt \
+        --extra-index-url https://pypi.org/simple \
+        --trusted-host pypi.org \
+        --trusted-host files.pythonhosted.org \
+        2>&1 | tee install.log
+    
+    if [ ${PIPESTATUS[0]} -eq 0 ]; then
+        echo -e "${GREEN}✓ Dependencies installed successfully${NC}"
+        rm -f install.log
+    else
+        echo -e "${YELLOW}⚠ Some packages may have failed to install${NC}"
+        echo "Check install.log for details"
+        echo ""
+        echo "Tip: You can retry with PyPI as primary index:"
+        echo "  pip install -r requirements.txt --index-url https://pypi.org/simple --extra-index-url <your-artifactory-url>"
+    fi
 else
     echo -e "${RED}Warning: requirements.txt not found${NC}"
 fi
