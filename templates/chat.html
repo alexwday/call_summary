@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Chat+</title>
-    <script src="https://cdn.jsdelivr.net/npm/markdown-it@13.0.1/dist/markdown-it.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.5/dist/purify.min.js"></script>
     <style>
         * {
@@ -1024,11 +1024,15 @@
     </div>
 
     <script>
-        const md = window.markdownit({
-            html: true,
-            linkify: true,
-            typographer: true,
-            breaks: true
+        // Configure marked for better performance with tables
+        marked.setOptions({
+            breaks: true,
+            gfm: true, // GitHub Flavored Markdown (supports tables)
+            tables: true,
+            sanitize: false, // We'll use DOMPurify for sanitization
+            pedantic: false,
+            smartLists: true,
+            smartypants: false
         });
 
         let isVoiceResponseEnabled = false;
@@ -1237,7 +1241,7 @@
             contentDiv.className = 'message-content';
             
             if (role === 'assistant') {
-                const rendered = md.render(content);
+                const rendered = marked.parse(content);
                 const sanitized = DOMPurify.sanitize(rendered);
                 contentDiv.innerHTML = sanitized;
             } else {
@@ -1321,42 +1325,26 @@
                                     accumulatedContent += data.content;
                                     sentenceBuffer += data.content;
                                     
-                                    // Check if we're potentially building a table
-                                    const hasTableStart = accumulatedContent.includes('|');
-                                    const lines = accumulatedContent.split('\n');
-                                    const lastLine = lines[lines.length - 1] || '';
-                                    const isIncompleteLine = lastLine.includes('|') && !lastLine.endsWith('\n') && lastLine.trim() !== '';
+                                    // Very simple approach - just show text and render periodically
+                                    contentDiv.textContent = accumulatedContent;
                                     
                                     // Clear any pending render
                                     if (renderTimeout) {
                                         clearTimeout(renderTimeout);
-                                        renderTimeout = null;
                                     }
                                     
-                                    // If we're in a table and the line is incomplete, wait for newline
-                                    if (hasTableStart && isIncompleteLine) {
-                                        // Wait a bit for the rest of the line
-                                        renderTimeout = setTimeout(() => {
-                                            // Show plain text while waiting
-                                            contentDiv.textContent = accumulatedContent;
-                                            renderTimeout = null;
-                                        }, 200);
-                                    } else {
-                                        // We have a complete line or no table, render it
-                                        const now = Date.now();
-                                        const timeSinceLastRender = now - lastRenderTime;
-                                        
-                                        if (timeSinceLastRender < MIN_RENDER_INTERVAL) {
-                                            renderTimeout = setTimeout(() => {
-                                                renderMarkdown(contentDiv, accumulatedContent);
-                                                lastRenderTime = Date.now();
-                                                renderTimeout = null;
-                                            }, MIN_RENDER_INTERVAL);
-                                        } else {
-                                            renderMarkdown(contentDiv, accumulatedContent);
-                                            lastRenderTime = now;
+                                    // Schedule a markdown render after a delay
+                                    renderTimeout = setTimeout(() => {
+                                        try {
+                                            const rendered = marked.parse(accumulatedContent);
+                                            const sanitized = DOMPurify.sanitize(rendered);
+                                            contentDiv.innerHTML = sanitized;
+                                        } catch (e) {
+                                            console.error('Markdown render error:', e);
+                                            // Keep plain text on error
                                         }
-                                    }
+                                        renderTimeout = null;
+                                    }, 250); // Render every 250ms
                                     
                                     // Check for sentence completion (only if voice responses enabled)
                                     if (isVoiceResponseEnabled) {
@@ -1433,59 +1421,13 @@
         }
 
         function renderMarkdown(element, content) {
+            // Simple, direct rendering without complex logic
             try {
-                // Store current highlighting state
-                const currentHighlights = element.querySelectorAll('.speaking-highlight');
-                const highlightedText = currentHighlights.length > 0 ? 
-                    Array.from(currentHighlights).map(el => el.textContent).join('') : null;
-                
-                // First, show the plain text immediately so user sees progress
-                element.textContent = content;
-                
-                // Then try to render markdown asynchronously
-                requestAnimationFrame(() => {
-                    try {
-                        // Fix incomplete tables before rendering
-                        let safeContent = content;
-                        const lines = content.split('\n');
-                        const lastLine = lines[lines.length - 1] || '';
-                        
-                        // If last line has pipes but doesn't end properly, add a placeholder
-                        if (lastLine.includes('|') && !lastLine.endsWith('|') && lastLine.trim() !== '') {
-                            safeContent = content + ' ... |';
-                        }
-                        
-                        // Check if we have a header row without separator
-                        const hasTableHeader = lines.some(line => line.includes('|'));
-                        const hasTableSeparator = lines.some(line => /^\s*\|[\s\-:]+\|/.test(line));
-                        
-                        if (hasTableHeader && !hasTableSeparator && lines.length > 0) {
-                            // Add a separator row if missing
-                            const firstTableLine = lines.find(line => line.includes('|'));
-                            if (firstTableLine) {
-                                const columnCount = (firstTableLine.match(/\|/g) || []).length - 1;
-                                if (columnCount > 0) {
-                                    const separator = '|' + ' --- |'.repeat(columnCount);
-                                    safeContent = safeContent + '\n' + separator;
-                                }
-                            }
-                        }
-                        
-                        const rendered = md.render(safeContent);
-                        const sanitized = DOMPurify.sanitize(rendered);
-                        element.innerHTML = sanitized;
-                        
-                        // Restore highlighting if audio is playing
-                        if (currentlyPlayingSentence && currentAudio && !currentAudio.paused) {
-                            highlightSentenceByText(currentlyPlayingSentence);
-                        }
-                    } catch (e) {
-                        console.error('Error rendering markdown:', e);
-                        // Keep plain text on error
-                    }
-                });
+                const rendered = marked.parse(content);
+                const sanitized = DOMPurify.sanitize(rendered);
+                element.innerHTML = sanitized;
             } catch (error) {
-                console.error('Error in renderMarkdown:', error);
+                console.error('Error rendering markdown:', error);
                 element.textContent = content; // Fallback to plain text
             }
         }

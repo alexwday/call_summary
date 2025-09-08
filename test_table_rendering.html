@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Table Rendering Test</title>
+    <script src="https://cdn.jsdelivr.net/npm/markdown-it@13.0.1/dist/markdown-it.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.5/dist/purify.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+        .panel {
+            border: 1px solid #ccc;
+            padding: 15px;
+            border-radius: 5px;
+        }
+        textarea {
+            width: 100%;
+            height: 300px;
+            font-family: monospace;
+            font-size: 12px;
+        }
+        #output {
+            background: #f5f5f5;
+            min-height: 300px;
+            overflow: auto;
+        }
+        button {
+            padding: 10px 20px;
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 10px 0;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        #status {
+            padding: 10px;
+            background: #fffacd;
+            border-radius: 5px;
+            margin-top: 10px;
+        }
+        table {
+            border-collapse: collapse;
+            width: 100%;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+        th {
+            background: #f0f0f0;
+        }
+    </style>
+</head>
+<body>
+    <h1>Table Rendering Test</h1>
+    
+    <div class="container">
+        <div class="panel">
+            <h2>Markdown Input</h2>
+            <textarea id="input" placeholder="Paste your markdown table here...">| Column 1 | Column 2 | Column 3 |
+|----------|----------|----------|
+| Data 1   | Data 2   | Data 3   |
+| Data 4   | Data 5   | Data 6   |</textarea>
+            <button onclick="renderTable()">Render Table</button>
+            <button onclick="simulateStreaming()">Simulate Streaming</button>
+            <button onclick="testIncompleteTable()">Test Incomplete Table</button>
+            <div id="status"></div>
+        </div>
+        
+        <div class="panel">
+            <h2>Rendered Output</h2>
+            <div id="output"></div>
+        </div>
+    </div>
+
+    <script>
+        const md = window.markdownit({
+            html: true,
+            linkify: true,
+            typographer: true,
+            breaks: true
+        });
+        
+        const outputDiv = document.getElementById('output');
+        const statusDiv = document.getElementById('status');
+        const inputTextarea = document.getElementById('input');
+        
+        function updateStatus(message) {
+            statusDiv.textContent = message;
+            console.log(message);
+        }
+        
+        function renderTable() {
+            const content = inputTextarea.value;
+            updateStatus('Rendering...');
+            
+            try {
+                const startTime = performance.now();
+                const rendered = md.render(content);
+                const endTime = performance.now();
+                
+                const sanitized = DOMPurify.sanitize(rendered);
+                outputDiv.innerHTML = sanitized;
+                
+                updateStatus(`Rendered successfully in ${(endTime - startTime).toFixed(2)}ms`);
+            } catch (error) {
+                updateStatus(`Error: ${error.message}`);
+                outputDiv.textContent = content;
+            }
+        }
+        
+        async function simulateStreaming() {
+            const fullContent = inputTextarea.value;
+            const chunks = [];
+            
+            // Simulate how content would be streamed character by character
+            for (let i = 0; i < fullContent.length; i++) {
+                chunks.push(fullContent.substring(0, i + 1));
+            }
+            
+            outputDiv.innerHTML = '';
+            let accumulatedContent = '';
+            
+            for (const chunk of chunks) {
+                accumulatedContent = chunk;
+                updateStatus(`Streaming: ${accumulatedContent.length} chars`);
+                
+                // Show plain text first
+                outputDiv.textContent = accumulatedContent;
+                
+                // Try to render markdown
+                try {
+                    const rendered = md.render(accumulatedContent);
+                    const sanitized = DOMPurify.sanitize(rendered);
+                    outputDiv.innerHTML = sanitized;
+                } catch (error) {
+                    console.error('Error during streaming:', error);
+                }
+                
+                // Small delay to simulate streaming
+                await new Promise(resolve => setTimeout(resolve, 50));
+            }
+            
+            updateStatus('Streaming complete');
+        }
+        
+        function testIncompleteTable() {
+            // Test with incomplete table that might cause issues
+            const testCases = [
+                '| Column 1',
+                '| Column 1 |',
+                '| Column 1 | Column 2',
+                '| Column 1 | Column 2 |',
+                '| Column 1 | Column 2 |\n|---',
+                '| Column 1 | Column 2 |\n|---|',
+                '| Column 1 | Column 2 |\n|---|---|',
+                '| Column 1 | Column 2 |\n|---|---|\n| Data 1',
+                '| Column 1 | Column 2 |\n|---|---|\n| Data 1 |'
+            ];
+            
+            let currentIndex = 0;
+            
+            function renderNext() {
+                if (currentIndex >= testCases.length) {
+                    updateStatus('Test complete');
+                    return;
+                }
+                
+                const testCase = testCases[currentIndex];
+                inputTextarea.value = testCase;
+                updateStatus(`Testing case ${currentIndex + 1}/${testCases.length}`);
+                
+                try {
+                    const startTime = performance.now();
+                    const rendered = md.render(testCase);
+                    const endTime = performance.now();
+                    
+                    const sanitized = DOMPurify.sanitize(rendered);
+                    outputDiv.innerHTML = sanitized;
+                    
+                    console.log(`Case ${currentIndex + 1} rendered in ${(endTime - startTime).toFixed(2)}ms`);
+                } catch (error) {
+                    console.error(`Case ${currentIndex + 1} error:`, error);
+                    outputDiv.textContent = testCase;
+                }
+                
+                currentIndex++;
+                setTimeout(renderNext, 500);
+            }
+            
+            renderNext();
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Debug Markdown Rendering</title>
+    <script src="https://cdn.jsdelivr.net/npm/markdown-it@13.0.1/dist/markdown-it.min.js"></script>
+</head>
+<body>
+    <h1>Debug Markdown Table Rendering</h1>
+    <pre id="log"></pre>
+    
+    <script>
+        const md = window.markdownit({
+            html: true,
+            linkify: true,
+            typographer: true,
+            breaks: true
+        });
+        
+        const logDiv = document.getElementById('log');
+        
+        function log(message) {
+            logDiv.textContent += message + '\n';
+            console.log(message);
+        }
+        
+        // Test cases that might freeze
+        const testCases = [
+            '| Header 1 | Header 2 | Header 3 |',
+            '| Header 1 | Header 2 | Header 3 |\n|',
+            '| Header 1 | Header 2 | Header 3 |\n|---|',
+            '| Header 1 | Header 2 | Header 3 |\n|---|---|',
+            '| Header 1 | Header 2 | Header 3 |\n|---|---|---|',
+            '| Header 1 | Header 2 | Header 3 |\n|---|---|---|\n| Data 1 | Data 2 | Data 3 |'
+        ];
+        
+        log('Starting tests...\n');
+        
+        testCases.forEach((testCase, index) => {
+            log(`\nTest ${index + 1}: "${testCase.replace(/\n/g, '\\n')}"`);
+            
+            try {
+                const startTime = performance.now();
+                
+                // Set a timeout to detect if it hangs
+                let timedOut = false;
+                const timeoutId = setTimeout(() => {
+                    timedOut = true;
+                    log(`  ❌ TIMEOUT - Rendering took too long!`);
+                }, 100);
+                
+                const rendered = md.render(testCase);
+                clearTimeout(timeoutId);
+                
+                const endTime = performance.now();
+                
+                if (!timedOut) {
+                    log(`  ✓ Rendered in ${(endTime - startTime).toFixed(2)}ms`);
+                    log(`  Output length: ${rendered.length} chars`);
+                }
+            } catch (error) {
+                log(`  ❌ ERROR: ${error.message}`);
+            }
+        });
+        
+        log('\n\nAll tests complete!');
+        
+        // Now test what the actual chat app is doing
+        log('\n\n--- Testing actual chat scenario ---');
+        
+        // Simulate streaming a table
+        const fullTable = `Here is the data in a table:
+
+| Name | Age | City | Country |
+|------|-----|------|---------|
+| John | 25 | NYC | USA |
+| Jane | 30 | London | UK |
+| Bob | 35 | Paris | France |`;
+        
+        let accumulated = '';
+        for (let i = 0; i < fullTable.length; i++) {
+            accumulated += fullTable[i];
+            
+            // Only log at key points
+            if (accumulated.endsWith('|') || accumulated.endsWith('\n')) {
+                try {
+                    const startTime = performance.now();
+                    const rendered = md.render(accumulated);
+                    const endTime = performance.now();
+                    log(`Char ${i}: OK (${(endTime - startTime).toFixed(2)}ms) - "${accumulated.slice(-20).replace(/\n/g, '\\n')}"`);
+                } catch (e) {
+                    log(`Char ${i}: ERROR - "${accumulated.slice(-20).replace(/\n/g, '\\n')}"`);
+                }
+            }
+        }
+    </script>
+</body>
+</html>
