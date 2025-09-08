@@ -1320,9 +1320,8 @@
                                 if (data.content) {
                                     accumulatedContent += data.content;
                                     sentenceBuffer += data.content;
-                                    pendingContent = accumulatedContent;
                                     
-                                    // Throttle rendering for performance
+                                    // Simple throttled rendering without complex table detection
                                     const now = Date.now();
                                     const timeSinceLastRender = now - lastRenderTime;
                                     
@@ -1332,31 +1331,17 @@
                                         renderTimeout = null;
                                     }
                                     
-                                    // Detect if we're in a table
-                                    const lines = pendingContent.split('\n');
-                                    const lastLine = lines[lines.length - 1];
-                                    const secondLastLine = lines[lines.length - 2] || '';
-                                    
-                                    // Check if we're building a table
-                                    const inTable = lines.some(line => line.includes('|'));
-                                    const hasIncompleteTableRow = inTable && lastLine.includes('|') && !lastLine.endsWith('|');
-                                    const isTableSeparator = /^\s*\|[\s\-\|:]+\|\s*$/.test(lastLine);
-                                    
-                                    // For tables, wait for complete rows (ending with |) or wait longer
-                                    const shouldWaitForTableRow = inTable && (hasIncompleteTableRow || timeSinceLastRender < 500);
-                                    const shouldThrottle = timeSinceLastRender < MIN_RENDER_INTERVAL || shouldWaitForTableRow;
-                                    
-                                    if (shouldThrottle) {
-                                        // For tables, use a longer delay
-                                        const delay = inTable ? 500 : MIN_RENDER_INTERVAL;
+                                    // Basic throttling - render every 100ms minimum
+                                    if (timeSinceLastRender < MIN_RENDER_INTERVAL) {
+                                        // Schedule a render after the throttle period
                                         renderTimeout = setTimeout(() => {
-                                            renderMarkdown(contentDiv, pendingContent);
+                                            renderMarkdown(contentDiv, accumulatedContent);
                                             lastRenderTime = Date.now();
                                             renderTimeout = null;
-                                        }, delay);
+                                        }, MIN_RENDER_INTERVAL);
                                     } else {
                                         // Render immediately
-                                        renderMarkdown(contentDiv, pendingContent);
+                                        renderMarkdown(contentDiv, accumulatedContent);
                                         lastRenderTime = now;
                                     }
                                     
@@ -1441,48 +1426,22 @@
                 const highlightedText = currentHighlights.length > 0 ? 
                     Array.from(currentHighlights).map(el => el.textContent).join('') : null;
                 
-                // For very large content or tables, render as plain text temporarily
-                const lineCount = (content.match(/\n/g) || []).length;
-                const hasLargeTable = content.includes('|') && lineCount > 50;
-                
-                if (hasLargeTable) {
-                    // For large tables, show plain text immediately
-                    element.textContent = content;
-                    
-                    // Then render markdown after a delay
-                    setTimeout(() => {
-                        try {
-                            const rendered = md.render(content);
-                            const sanitized = DOMPurify.sanitize(rendered);
-                            element.innerHTML = sanitized;
-                            
-                            // Restore highlighting if audio is playing
-                            if (currentlyPlayingSentence && currentAudio && !currentAudio.paused) {
-                                highlightSentenceByText(currentlyPlayingSentence);
-                            }
-                        } catch (e) {
-                            console.error('Error rendering large table:', e);
-                            // Keep plain text if rendering fails
+                // Use requestAnimationFrame for smoother rendering
+                requestAnimationFrame(() => {
+                    try {
+                        const rendered = md.render(content);
+                        const sanitized = DOMPurify.sanitize(rendered);
+                        element.innerHTML = sanitized;
+                        
+                        // Restore highlighting if audio is playing
+                        if (currentlyPlayingSentence && currentAudio && !currentAudio.paused) {
+                            highlightSentenceByText(currentlyPlayingSentence);
                         }
-                    }, 100);
-                } else {
-                    // Use requestAnimationFrame for smoother rendering of regular content
-                    requestAnimationFrame(() => {
-                        try {
-                            const rendered = md.render(content);
-                            const sanitized = DOMPurify.sanitize(rendered);
-                            element.innerHTML = sanitized;
-                            
-                            // Restore highlighting if audio is playing
-                            if (currentlyPlayingSentence && currentAudio && !currentAudio.paused) {
-                                highlightSentenceByText(currentlyPlayingSentence);
-                            }
-                        } catch (e) {
-                            console.error('Error rendering markdown:', e);
-                            element.textContent = content; // Fallback to plain text
-                        }
-                    });
-                }
+                    } catch (e) {
+                        console.error('Error rendering markdown:', e);
+                        element.textContent = content; // Fallback to plain text
+                    }
+                });
             } catch (error) {
                 console.error('Error rendering markdown:', error);
                 element.textContent = content; // Fallback to plain text
