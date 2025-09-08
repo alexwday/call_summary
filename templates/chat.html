@@ -1321,9 +1321,11 @@
                                     accumulatedContent += data.content;
                                     sentenceBuffer += data.content;
                                     
-                                    // Simple throttled rendering without complex table detection
-                                    const now = Date.now();
-                                    const timeSinceLastRender = now - lastRenderTime;
+                                    // Check if we're potentially building a table
+                                    const hasTableStart = accumulatedContent.includes('|');
+                                    const lines = accumulatedContent.split('\n');
+                                    const lastLine = lines[lines.length - 1] || '';
+                                    const isIncompleteLine = lastLine.includes('|') && !lastLine.endsWith('\n') && lastLine.trim() !== '';
                                     
                                     // Clear any pending render
                                     if (renderTimeout) {
@@ -1331,18 +1333,29 @@
                                         renderTimeout = null;
                                     }
                                     
-                                    // Basic throttling - render every 100ms minimum
-                                    if (timeSinceLastRender < MIN_RENDER_INTERVAL) {
-                                        // Schedule a render after the throttle period
+                                    // If we're in a table and the line is incomplete, wait for newline
+                                    if (hasTableStart && isIncompleteLine) {
+                                        // Wait a bit for the rest of the line
                                         renderTimeout = setTimeout(() => {
-                                            renderMarkdown(contentDiv, accumulatedContent);
-                                            lastRenderTime = Date.now();
+                                            // Show plain text while waiting
+                                            contentDiv.textContent = accumulatedContent;
                                             renderTimeout = null;
-                                        }, MIN_RENDER_INTERVAL);
+                                        }, 200);
                                     } else {
-                                        // Render immediately
-                                        renderMarkdown(contentDiv, accumulatedContent);
-                                        lastRenderTime = now;
+                                        // We have a complete line or no table, render it
+                                        const now = Date.now();
+                                        const timeSinceLastRender = now - lastRenderTime;
+                                        
+                                        if (timeSinceLastRender < MIN_RENDER_INTERVAL) {
+                                            renderTimeout = setTimeout(() => {
+                                                renderMarkdown(contentDiv, accumulatedContent);
+                                                lastRenderTime = Date.now();
+                                                renderTimeout = null;
+                                            }, MIN_RENDER_INTERVAL);
+                                        } else {
+                                            renderMarkdown(contentDiv, accumulatedContent);
+                                            lastRenderTime = now;
+                                        }
                                     }
                                     
                                     // Check for sentence completion (only if voice responses enabled)
@@ -1426,10 +1439,39 @@
                 const highlightedText = currentHighlights.length > 0 ? 
                     Array.from(currentHighlights).map(el => el.textContent).join('') : null;
                 
-                // Use requestAnimationFrame for smoother rendering
+                // First, show the plain text immediately so user sees progress
+                element.textContent = content;
+                
+                // Then try to render markdown asynchronously
                 requestAnimationFrame(() => {
                     try {
-                        const rendered = md.render(content);
+                        // Fix incomplete tables before rendering
+                        let safeContent = content;
+                        const lines = content.split('\n');
+                        const lastLine = lines[lines.length - 1] || '';
+                        
+                        // If last line has pipes but doesn't end properly, add a placeholder
+                        if (lastLine.includes('|') && !lastLine.endsWith('|') && lastLine.trim() !== '') {
+                            safeContent = content + ' ... |';
+                        }
+                        
+                        // Check if we have a header row without separator
+                        const hasTableHeader = lines.some(line => line.includes('|'));
+                        const hasTableSeparator = lines.some(line => /^\s*\|[\s\-:]+\|/.test(line));
+                        
+                        if (hasTableHeader && !hasTableSeparator && lines.length > 0) {
+                            // Add a separator row if missing
+                            const firstTableLine = lines.find(line => line.includes('|'));
+                            if (firstTableLine) {
+                                const columnCount = (firstTableLine.match(/\|/g) || []).length - 1;
+                                if (columnCount > 0) {
+                                    const separator = '|' + ' --- |'.repeat(columnCount);
+                                    safeContent = safeContent + '\n' + separator;
+                                }
+                            }
+                        }
+                        
+                        const rendered = md.render(safeContent);
                         const sanitized = DOMPurify.sanitize(rendered);
                         element.innerHTML = sanitized;
                         
@@ -1439,11 +1481,11 @@
                         }
                     } catch (e) {
                         console.error('Error rendering markdown:', e);
-                        element.textContent = content; // Fallback to plain text
+                        // Keep plain text on error
                     }
                 });
             } catch (error) {
-                console.error('Error rendering markdown:', error);
+                console.error('Error in renderMarkdown:', error);
                 element.textContent = content; // Fallback to plain text
             }
         }
