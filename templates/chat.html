@@ -1325,43 +1325,21 @@
                                     accumulatedContent += data.content;
                                     sentenceBuffer += data.content;
                                     
-                                    // Always show plain text immediately
-                                    contentDiv.textContent = accumulatedContent;
+                                    // DEBUG LOGGING
+                                    console.log('Received chunk:', data.content);
+                                    console.log('Total content length:', accumulatedContent.length);
                                     
-                                    // Clear any pending render
-                                    if (renderTimeout) {
-                                        clearTimeout(renderTimeout);
+                                    // Create a pre element for better display of tables
+                                    if (!contentDiv.querySelector('pre')) {
+                                        contentDiv.innerHTML = '<pre style="white-space: pre-wrap; word-wrap: break-word; font-family: monospace;"></pre>';
                                     }
+                                    const preElement = contentDiv.querySelector('pre');
+                                    preElement.textContent = accumulatedContent;
                                     
-                                    // Check if content might have a table
-                                    const mightHaveTable = accumulatedContent.includes('|');
+                                    // Scroll to bottom
+                                    chatMessages.scrollTop = chatMessages.scrollHeight;
                                     
-                                    // Use longer delay for content with tables
-                                    const delay = mightHaveTable ? 1000 : 250;
-                                    
-                                    // Schedule a markdown render after a delay
-                                    renderTimeout = setTimeout(() => {
-                                        try {
-                                            // Try custom table rendering first if it looks like a table
-                                            if (mightHaveTable) {
-                                                const customRendered = renderContentWithTables(accumulatedContent);
-                                                if (customRendered) {
-                                                    contentDiv.innerHTML = customRendered;
-                                                    renderTimeout = null;
-                                                    return;
-                                                }
-                                            }
-                                            
-                                            // Fallback to marked
-                                            const rendered = marked.parse(accumulatedContent);
-                                            const sanitized = DOMPurify.sanitize(rendered);
-                                            contentDiv.innerHTML = sanitized;
-                                        } catch (e) {
-                                            console.error('Markdown render error:', e);
-                                            // Keep plain text on error
-                                        }
-                                        renderTimeout = null;
-                                    }, delay);
+                                    // MARKDOWN RENDERING DISABLED - This was causing the freeze
                                     
                                     // Check for sentence completion (only if voice responses enabled)
                                     if (isVoiceResponseEnabled) {
