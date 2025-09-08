@@ -1273,6 +1273,10 @@
             let accumulatedContent = '';
             let sentenceBuffer = '';
             let processedSentences = new Set();
+            let renderTimeout = null;
+            let lastRenderTime = 0;
+            const MIN_RENDER_INTERVAL = 100; // Minimum 100ms between renders
+            let pendingContent = '';
             
             try {
                 // Cancel any existing stream
@@ -1316,16 +1320,34 @@
                                 if (data.content) {
                                     accumulatedContent += data.content;
                                     sentenceBuffer += data.content;
+                                    pendingContent = accumulatedContent;
                                     
-                                    // Store current highlighting state
-                                    const currentHighlights = contentDiv.querySelectorAll('.speaking-highlight');
-                                    const highlightedText = currentHighlights.length > 0 ? 
-                                        Array.from(currentHighlights).map(el => el.textContent).join('') : null;
+                                    // Throttle rendering for performance
+                                    const now = Date.now();
+                                    const timeSinceLastRender = now - lastRenderTime;
                                     
-                                    // Render markdown
-                                    const rendered = md.render(accumulatedContent);
-                                    const sanitized = DOMPurify.sanitize(rendered);
-                                    contentDiv.innerHTML = sanitized;
+                                    // Clear any pending render
+                                    if (renderTimeout) {
+                                        clearTimeout(renderTimeout);
+                                        renderTimeout = null;
+                                    }
+                                    
+                                    // Check if it's safe to render based on content patterns
+                                    const hasIncompleteTable = /\|[^\n]*$/.test(pendingContent) && !pendingContent.endsWith('\n');
+                                    const shouldThrottle = timeSinceLastRender < MIN_RENDER_INTERVAL || hasIncompleteTable;
+                                    
+                                    if (shouldThrottle) {
+                                        // Schedule a render after the throttle period
+                                        renderTimeout = setTimeout(() => {
+                                            renderMarkdown(contentDiv, pendingContent);
+                                            lastRenderTime = Date.now();
+                                            renderTimeout = null;
+                                        }, MIN_RENDER_INTERVAL);
+                                    } else {
+                                        // Render immediately
+                                        renderMarkdown(contentDiv, pendingContent);
+                                        lastRenderTime = now;
+                                    }
                                     
                                     // Check for sentence completion (only if voice responses enabled)
                                     if (isVoiceResponseEnabled) {
@@ -1352,7 +1374,11 @@
                                         }
                                     }
                                     
-                                    chatMessages.scrollTop = chatMessages.scrollHeight;
+                                    // Only auto-scroll if user is near the bottom
+                                    const isNearBottom = chatMessages.scrollHeight - chatMessages.scrollTop - chatMessages.clientHeight < 100;
+                                    if (isNearBottom) {
+                                        chatMessages.scrollTop = chatMessages.scrollHeight;
+                                    }
                                 }
                                 
                                 // Update status if provided
@@ -1364,6 +1390,12 @@
                             }
                         }
                     }
+                }
+                
+                // Final render if there's pending content
+                if (renderTimeout) {
+                    clearTimeout(renderTimeout);
+                    renderMarkdown(contentDiv, accumulatedContent);
                 }
                 
                 // Process any remaining sentence buffer (only if voice responses enabled)
@@ -1391,6 +1423,30 @@
             }
         }
 
+        function renderMarkdown(element, content) {
+            try {
+                // Store current highlighting state
+                const currentHighlights = element.querySelectorAll('.speaking-highlight');
+                const highlightedText = currentHighlights.length > 0 ? 
+                    Array.from(currentHighlights).map(el => el.textContent).join('') : null;
+                
+                // Use requestAnimationFrame for smoother rendering
+                requestAnimationFrame(() => {
+                    const rendered = md.render(content);
+                    const sanitized = DOMPurify.sanitize(rendered);
+                    element.innerHTML = sanitized;
+                    
+                    // Restore highlighting if audio is playing
+                    if (currentlyPlayingSentence && currentAudio && !currentAudio.paused) {
+                        highlightSentenceByText(currentlyPlayingSentence);
+                    }
+                });
+            } catch (error) {
+                console.error('Error rendering markdown:', error);
+                element.textContent = content; // Fallback to plain text
+            }
+        }
+        
         function extractCompleteSentences(text) {
             // Match sentences ending with ., !, or ?
             const regex = /[^.!?]*[.!?]+/g;
