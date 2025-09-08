@@ -26,10 +26,9 @@ import urllib.request
 def configure_ssl():
     """Configure SSL settings based on environment."""
     ssl_verify = os.environ.get('SSL_VERIFY', 'true').lower() == 'true'
-    ssl_cert_file = os.environ.get('SSL_CERT_FILE', '')
+    ssl_cert_file = os.environ.get('SSL_CERT_FILE', 'rbc-ca-bundle.cer')
     
-    # Only use certificate if explicitly provided and exists
-    if ssl_verify and ssl_cert_file and os.path.exists(ssl_cert_file):
+    if ssl_verify and os.path.exists(ssl_cert_file):
         print(f"🔒 Using SSL certificate: {ssl_cert_file}")
         # Create SSL context with corporate certificate
         ssl_context = ssl.create_default_context(cafile=ssl_cert_file)
