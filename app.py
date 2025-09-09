@@ -4,6 +4,7 @@ Flask web application for document chatbot with integrated STT and TTS.
 
 import os
 import uuid
+import json
 from datetime import datetime
 from flask import Flask, render_template, request, jsonify, Response, session
 from flask_cors import CORS
@@ -393,11 +394,27 @@ def chat():
         selected_model = data.get('model', SESSIONS[session_id].get('selected_model', 'large'))
         is_voice_mode = data.get('voice_mode', False)
         selected_document_ids = data.get('selected_documents', [])
+        use_streaming = data.get('stream', True)  # Default to streaming
         # Use 'voice' or 'text' prompt mode based on voice_mode flag
         prompt_mode = 'voice' if is_voice_mode else 'text'
         
+        # Check if model is o-series (o1, o3, o4, etc)
+        model_name = MODEL_OPTIONS[selected_model]['name']
+        is_o_series = model_name.startswith('o') and model_name[1].isdigit()
+        
+        # Force non-streaming for o-series models if they don't support it
+        if is_o_series and 'o4-mini' in model_name:
+            # o4-mini may support streaming, but let's respect user choice
+            pass
+        elif is_o_series and use_streaming:
+            logger.info(f"O-series model {model_name} detected, checking streaming support")
+            # Some o-series models don't support streaming
+            if model_name in ['o1', 'o1-2024-12-17']:
+                use_streaming = False
+                logger.info(f"Forcing non-streaming mode for {model_name}")
+        
         # Log model selection
-        logger.info(f"Chat request - Model: {selected_model}, Model Name: {MODEL_OPTIONS[selected_model]['name']}, Voice Mode: {is_voice_mode}")
+        logger.info(f"Chat request - Model: {selected_model}, Model Name: {model_name}, Voice Mode: {is_voice_mode}, Streaming: {use_streaming}")
         
         if not message:
             return jsonify({'error': 'No message provided'}), 400
@@ -430,7 +447,56 @@ def chat():
                 conversation['documents'] = selected_docs
                 logger.info(f"Using {len(selected_docs)} selected documents out of {len(SESSIONS[session_id]['documents'])} total")
         
-        # Stream response
+        # Non-streaming response for o-series models or when streaming is disabled
+        if not use_streaming:
+            try:
+                # Collect the full response
+                full_response = ""
+                usage_info = None
+                metrics_info = None
+                
+                for chunk in model(conversation):
+                    if chunk.get('type') == 'assistant':
+                        full_response += chunk.get('content', '')
+                    elif chunk.get('type') == 'usage':
+                        usage_info = chunk.get('usage', {})
+                        metrics_info = chunk.get('metrics', {})
+                    elif chunk.get('type') == 'error':
+                        return jsonify({'error': chunk.get('content', 'Unknown error')}), 500
+                
+                # Store the complete response
+                if full_response:
+                    SESSIONS[session_id]['messages'].append({
+                        'role': 'assistant',
+                        'content': full_response
+                    })
+                    
+                    # Update token counts
+                    if usage_info:
+                        input_tokens = usage_info.get('prompt_tokens', 0)
+                        output_tokens = usage_info.get('completion_tokens', 0)
+                        
+                        SESSIONS[session_id]['total_tokens']['input'] += input_tokens
+                        SESSIONS[session_id]['total_tokens']['output'] += output_tokens
+                        
+                        if metrics_info and 'total_cost' in metrics_info:
+                            SESSIONS[session_id]['total_cost'] += metrics_info['total_cost']
+                        else:
+                            model_config = MODEL_OPTIONS[selected_model]
+                            input_cost = (input_tokens / 1000) * model_config['cost_input']
+                            output_cost = (output_tokens / 1000) * model_config['cost_output']
+                            SESSIONS[session_id]['total_cost'] += input_cost + output_cost
+                
+                return jsonify({
+                    'content': full_response,
+                    'usage': usage_info,
+                    'metrics': metrics_info
+                })
+            except Exception as e:
+                logger.error(f"Non-streaming chat error: {e}")
+                return jsonify({'error': str(e)}), 500
+        
+        # Stream response (existing streaming code)
         def generate():
             assistant_message = ""
             usage_info = None
@@ -452,7 +518,6 @@ def chat():
                             logger.debug(f"Chunk {chunk_count}: len={len(content)}, has_pipe={'|' in content}, preview={repr(content[:50])}")
                         
                         # Send as JSON for the frontend to parse
-                        import json
                         try:
                             # Use ensure_ascii=False to handle special characters properly
                             json_data = json.dumps({'content': content}, ensure_ascii=False)

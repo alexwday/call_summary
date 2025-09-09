@@ -459,6 +459,19 @@ def stream(  # pylint: disable=too-many-locals
         llm_params.get("model"), llm_params.get("temperature"), llm_params.get("max_tokens"),
         default_tier=model_size
     )
+    
+    # Check if this is an o-series model
+    is_o_series = model.startswith('o') and len(model) > 1 and model[1].isdigit()
+    
+    # Override parameters for o-series models
+    if is_o_series:
+        logger.info(f"O-series model {model} detected, adjusting parameters")
+        # O-series models don't support temperature, top_p, etc.
+        temperature = 1.0  # Must be 1 for o-series
+        # Remove unsupported parameters
+        for unsupported_param in ['temperature', 'top_p', 'presence_penalty', 'frequency_penalty', 
+                                   'logprobs', 'top_logprobs', 'logit_bias']:
+            llm_params.pop(unsupported_param, None)
 
     logger.info(
         "Starting LLM streaming",

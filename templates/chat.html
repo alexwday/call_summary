@@ -975,6 +975,12 @@
                         <option value="large" selected>Large (Best)</option>
                     </select>
                 </div>
+                <div class="model-selector" style="margin-left: 10px;">
+                    <label>
+                        <input type="checkbox" id="streamingToggle" checked>
+                        Streaming
+                    </label>
+                </div>
                 <button id="clearChatButton" class="clear-chat-btn" title="Clear chat history">Clear Chat</button>
                 <div class="status-info">
                     <div class="status-item">
@@ -1053,6 +1059,7 @@
         const voiceModeToggle = document.getElementById('voiceModeToggle');
         const toggleSwitch = document.getElementById('toggleSwitch');
         const recordButton = document.getElementById('recordButton');
+        const streamingToggle = document.getElementById('streamingToggle');
         const recordingIndicator = document.getElementById('recordingIndicator');
         const audioStatusIndicator = document.getElementById('audioStatusIndicator');
         const modelSelect = document.getElementById('modelSelectSidebar');
@@ -1287,7 +1294,8 @@
             sendButton.disabled = true;
             
             const model = modelSelect.value;
-            console.log('Using model:', model);
+            const useStreaming = streamingToggle.checked;
+            console.log('Using model:', model, 'Streaming:', useStreaming);
             
             // Create streaming message
             const { messageDiv, contentDiv } = addMessage('assistant', '', true);
@@ -1312,6 +1320,47 @@
                 
                 streamController = new AbortController();
                 
+                // Check if we should use streaming or not
+                if (!useStreaming) {
+                    // Non-streaming mode for better table handling and o-series models
+                    const response = await fetch('/chat', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            message: text,
+                            model: model,
+                            stream: false,
+                            voice_mode: isVoiceResponseEnabled,
+                            selected_documents: Array.from(selectedDocuments)
+                        }),
+                        signal: streamController.signal
+                    });
+                    
+                    if (!response.ok) throw new Error('Failed to get response');
+                    
+                    const data = await response.json();
+                    if (data.content) {
+                        // Display complete response at once
+                        markdownRenderer.finalRender(data.content, contentDiv);
+                        
+                        // Handle voice if enabled
+                        if (isVoiceResponseEnabled) {
+                            const sentences = extractCompleteSentences(data.content);
+                            for (const sentence of sentences) {
+                                generateAudio(sentence);
+                            }
+                        }
+                    }
+                    
+                    // Update status with token counts
+                    fetchStatus();
+                    sendButton.disabled = false;
+                    return;
+                }
+                
+                // Streaming mode (existing flow)
                 const response = await fetch('/chat', {
                     method: 'POST',
                     headers: {
