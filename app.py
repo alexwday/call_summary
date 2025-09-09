@@ -513,9 +513,7 @@ def chat():
                         last_content = content
                         assistant_message += content
                         
-                        # Log every 10th chunk and any chunk with table markers
-                        if chunk_count % 10 == 0 or '|' in content:
-                            logger.debug(f"Chunk {chunk_count}: len={len(content)}, has_pipe={'|' in content}, preview={repr(content[:50])}")
+                        # Remove verbose chunk logging - only track for error reporting
                         
                         # Send as JSON for the frontend to parse
                         try:
