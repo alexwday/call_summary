@@ -86,16 +86,16 @@ default_whisper_model = 'small'
 whisper_model_path = WHISPER_MODELS[default_whisper_model]
 
 # Initialize voice models
-print("Loading voice models...")
-print(f"Loading Whisper models (default: {default_whisper_model})...")
-print("Whisper model ready!")
+app.logger.info("Loading voice models...")
+app.logger.info(f"Loading Whisper models (default: {default_whisper_model})...")
+app.logger.info("Whisper model ready!")
 
-print("Loading Kokoro 82M model...")
+app.logger.info("Loading Kokoro 82M model...")
 tts_model_id = 'mlx-community/Kokoro-82M-4bit'
 tts_model = load_model(tts_model_id)
 tts_pipeline = KokoroPipeline(lang_code='a', model=tts_model, repo_id=tts_model_id)
-print("Kokoro TTS model ready!")
-print("All voice models loaded successfully!")
+app.logger.info("Kokoro TTS model ready!")
+app.logger.info("All voice models loaded successfully!")
 
 # Allowed file extensions
 ALLOWED_EXTENSIONS = {'pdf', 'docx', 'doc', 'txt'}
@@ -806,11 +806,11 @@ def transcribe_audio():
         # Medium model is now downloaded and available
         # Large model may still need downloading
         if model_size == 'large':
-            print(f"Model {model_size} may need downloading, falling back to {default_whisper_model}")
+            app.logger.info(f"Model {model_size} may need downloading, falling back to {default_whisper_model}")
             model_size = default_whisper_model
         
         selected_model_path = WHISPER_MODELS[model_size]
-        print(f"Using Whisper model: {model_size} ({selected_model_path})")
+        # Using Whisper model: {model_size}
         
         # Check if file is empty
         audio_file.seek(0, os.SEEK_END)
@@ -818,10 +818,10 @@ def transcribe_audio():
         audio_file.seek(0)
         
         if file_size == 0:
-            print("Received empty audio file")
+            app.logger.warning("Received empty audio file")
             return jsonify({"error": "Audio file is empty"}), 400
         
-        print(f"Received audio file, size: {file_size} bytes")
+        app.logger.debug(f"Received audio file, size: {file_size} bytes")
         
         # Save the uploaded file temporarily
         with tempfile.NamedTemporaryFile(delete=False, suffix='.webm') as tmp_file:
@@ -829,15 +829,15 @@ def transcribe_audio():
             temp_path = tmp_file.name
         
         try:
-            print(f"Transcribing audio file: {temp_path}")
+            app.logger.debug(f"Transcribing audio file: {temp_path}")
             start_time = time.time()
             
             # Check file size on disk
             disk_size = os.path.getsize(temp_path)
-            print(f"Saved file size: {disk_size} bytes")
+            app.logger.debug(f"Saved file size: {disk_size} bytes")
             
             if disk_size < 100:  # Too small to be valid audio
-                print("Audio file too small to process")
+                app.logger.warning("Audio file too small to process")
                 return jsonify({"error": "Audio file too small"}), 400
             
             # Transcribe the audio with selected model
@@ -850,7 +850,7 @@ def transcribe_audio():
             transcription = result["text"].strip()
             
             transcription_time = time.time() - start_time
-            print(f"Transcription complete in {transcription_time:.2f}s: {transcription}")
+            app.logger.info(f"Transcription complete in {transcription_time:.2f}s")
             
             if not transcription:
                 return jsonify({"error": "No speech detected"}), 400
@@ -866,7 +866,7 @@ def transcribe_audio():
                 os.remove(temp_path)
         
     except Exception as e:
-        print(f"Error transcribing audio: {str(e)}")
+        app.logger.error(f"Error transcribing audio: {str(e)}")
         import traceback
         traceback.print_exc()
         return jsonify({"error": str(e)}), 500
@@ -885,7 +885,7 @@ def generate_audio():
         if not text:
             return jsonify({"error": "No text provided"}), 400
         
-        print(f"Generating audio for: {text} (voice: {voice}, speed: {speed})")
+        app.logger.debug(f"Generating TTS audio (voice: {voice}, speed: {speed})")
         start_time = time.time()
         
         # Generate audio using Kokoro with specified voice
@@ -913,7 +913,7 @@ def generate_audio():
             audio_array = audio_array / max_val
         
         generation_time = time.time() - start_time
-        print(f"Audio generated in {generation_time:.2f} seconds")
+        app.logger.debug(f"Audio generated in {generation_time:.2f} seconds")
         
         # Convert to WAV bytes
         buffer = io.BytesIO()
@@ -930,7 +930,7 @@ def generate_audio():
         )
         
     except Exception as e:
-        print(f"Error generating audio: {str(e)}")
+        app.logger.error(f"Error generating audio: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
 

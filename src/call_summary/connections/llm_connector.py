@@ -520,9 +520,7 @@ def stream(  # pylint: disable=too-many-locals
                     if content:
                         last_chunk_content = content
                         total_content += content
-                        # Log chunks with table markers or every 50th chunk
-                        if '|' in content or chunk_count % 50 == 0:
-                            logger.debug(f"Stream chunk {chunk_count}: {repr(content[:100])}")
+                        # Remove verbose chunk logging - only log in error scenarios
 
                 # Accumulate usage from the final chunk (if present)
                 if chunk_dict.get("usage"):
