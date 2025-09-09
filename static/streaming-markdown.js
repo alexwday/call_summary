@@ -10,14 +10,6 @@ class StreamingMarkdownRenderer {
         this.lastRenderTime = 0;
         this.minRenderInterval = 50; // Minimum ms between renders
         
-        // State tracking
-        this.inCodeBlock = false;
-        this.inTable = false;
-        this.inList = false;
-        this.codeBlockDelimiter = '';
-        this.tableBuffer = '';
-        this.listBuffer = '';
-        
         // Configure marked with safe defaults
         this.configureMarked();
     }
@@ -65,99 +57,49 @@ class StreamingMarkdownRenderer {
     
     /**
      * Extract content that's safe to render (complete structures only)
+     * IMPORTANT: Preserve order - don't extract tables/lists out of sequence
      */
     extractSafeContent(content) {
+        // For streaming, we should be more conservative
+        // Only render complete paragraphs and let marked handle the rest
+        // This prevents reordering issues
+        
         let safeContent = '';
-        let buffer = '';
         const lines = content.split('\n');
+        let inCodeBlock = false;
+        let codeBlockBuffer = '';
         
         for (let i = 0; i < lines.length; i++) {
             const line = lines[i];
-            const nextLine = lines[i + 1];
             
-            // Check for code block
+            // Track code blocks to avoid rendering incomplete ones
             if (line.startsWith('```')) {
-                if (!this.inCodeBlock) {
-                    this.inCodeBlock = true;
-                    this.codeBlockDelimiter = line;
-                    buffer = line + '\n';
+                if (!inCodeBlock) {
+                    inCodeBlock = true;
+                    codeBlockBuffer = line + '\n';
                 } else {
-                    // End of code block - make sure we match opening delimiter
-                    this.inCodeBlock = false;
-                    buffer += line + '\n';
-                    safeContent += buffer;
-                    buffer = '';
+                    // End of code block
+                    codeBlockBuffer += line + '\n';
+                    safeContent += codeBlockBuffer;
+                    codeBlockBuffer = '';
+                    inCodeBlock = false;
                 }
                 continue;
             }
             
-            // If in code block, buffer everything
-            if (this.inCodeBlock) {
-                buffer += line + '\n';
+            if (inCodeBlock) {
+                codeBlockBuffer += line + '\n';
                 continue;
             }
             
-            // Check for table
-            if (this.looksLikeTableRow(line)) {
-                if (!this.inTable) {
-                    this.inTable = true;
-                    this.tableBuffer = line + '\n';
-                } else {
-                    this.tableBuffer += line + '\n';
-                }
-                
-                // Check if table is complete
-                if (this.isTableComplete(this.tableBuffer, nextLine)) {
-                    safeContent += this.tableBuffer;
-                    this.tableBuffer = '';
-                    this.inTable = false;
-                }
-                continue;
-            } else if (this.inTable) {
-                // Line doesn't look like table, table must be complete
-                safeContent += this.tableBuffer;
-                this.tableBuffer = '';
-                this.inTable = false;
-                // Process current line normally
-            }
-            
-            // Check for lists
-            if (this.looksLikeListItem(line)) {
-                if (!this.inList) {
-                    this.inList = true;
-                    this.listBuffer = line + '\n';
-                } else {
-                    this.listBuffer += line + '\n';
-                }
-                
-                // Check if list is complete (next line isn't a list item or indented)
-                if (!nextLine || (!this.looksLikeListItem(nextLine) && !nextLine.match(/^\s{2,}/))) {
-                    safeContent += this.listBuffer;
-                    this.listBuffer = '';
-                    this.inList = false;
-                }
-                continue;
-            } else if (this.inList) {
-                // Check for indented continuation
-                if (line.match(/^\s{2,}/)) {
-                    this.listBuffer += line + '\n';
-                    continue;
-                } else {
-                    // List is complete
-                    safeContent += this.listBuffer;
-                    this.listBuffer = '';
-                    this.inList = false;
-                }
-            }
-            
-            // Regular line - safe to add
-            if (!this.inCodeBlock && !this.inTable && !this.inList) {
-                safeContent += line + '\n';
-            }
+            // For everything else, just add it directly
+            // Let marked.js handle table detection and rendering
+            // This preserves the original order
+            safeContent += line + '\n';
         }
         
-        // Don't render incomplete structures
-        // They'll be rendered when complete
+        // If we're still in a code block, don't render it yet
+        // It will be rendered when complete
         
         return safeContent;
     }
@@ -359,11 +301,6 @@ class StreamingMarkdownRenderer {
         }
         
         // Reset state
-        this.inCodeBlock = false;
-        this.inTable = false;
-        this.inList = false;
-        this.tableBuffer = '';
-        this.listBuffer = '';
         this.buffer = '';
         
         // Log for debugging
