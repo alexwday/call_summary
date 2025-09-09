@@ -81,8 +81,8 @@ class StreamingMarkdownRenderer {
                     this.inCodeBlock = true;
                     this.codeBlockDelimiter = line;
                     buffer = line + '\n';
-                } else if (line === '```' || line.startsWith('```')) {
-                    // End of code block
+                } else {
+                    // End of code block - make sure we match opening delimiter
                     this.inCodeBlock = false;
                     buffer += line + '\n';
                     safeContent += buffer;
@@ -364,6 +364,10 @@ class StreamingMarkdownRenderer {
         this.inList = false;
         this.tableBuffer = '';
         this.listBuffer = '';
+        this.buffer = '';
+        
+        // Log for debugging
+        console.log('Final render - content length:', content.length);
         
         // Do a complete render
         try {
@@ -371,11 +375,18 @@ class StreamingMarkdownRenderer {
                 const rendered = marked.parse(content);
                 const sanitized = DOMPurify.sanitize(rendered);
                 targetElement.innerHTML = sanitized;
+                
+                // Check if we rendered any tables
+                const tables = targetElement.querySelectorAll('table');
+                if (tables.length > 0) {
+                    console.log('Rendered', tables.length, 'table(s) in final render');
+                }
             } else {
                 this.renderFallback(content, targetElement);
             }
         } catch (error) {
             console.error('Final render error:', error);
+            console.error('Content that failed:', content.substring(0, 500));
             this.renderFallback(content, targetElement);
         }
     }

@@ -1287,6 +1287,7 @@
             sendButton.disabled = true;
             
             const model = modelSelect.value;
+            console.log('Using model:', model);
             
             // Create streaming message
             const { messageDiv, contentDiv } = addMessage('assistant', '', true);
@@ -1393,6 +1394,14 @@
                 }
                 
                 // Final render with complete content
+                console.log('Stream complete - total content:', accumulatedContent.length, 'chars');
+                // Log if content contains table markers
+                if (accumulatedContent.includes('|')) {
+                    console.log('Content contains table markers');
+                    // Log a snippet around the first table
+                    const tableIndex = accumulatedContent.indexOf('|');
+                    console.log('Table area:', accumulatedContent.substring(Math.max(0, tableIndex - 50), Math.min(accumulatedContent.length, tableIndex + 200)));
+                }
                 markdownRenderer.finalRender(accumulatedContent, contentDiv);
                 
                 // Process any remaining sentence buffer (only if voice responses enabled)

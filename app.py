@@ -396,6 +396,9 @@ def chat():
         # Use 'voice' or 'text' prompt mode based on voice_mode flag
         prompt_mode = 'voice' if is_voice_mode else 'text'
         
+        # Log model selection
+        logger.info(f"Chat request - Model: {selected_model}, Model Name: {MODEL_OPTIONS[selected_model]['name']}, Voice Mode: {is_voice_mode}")
+        
         if not message:
             return jsonify({'error': 'No message provided'}), 400
         
