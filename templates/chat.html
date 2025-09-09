@@ -1249,6 +1249,21 @@
             } else if (role === 'assistant' && isStreaming) {
                 // For streaming, content will be set later
                 contentDiv.innerHTML = '';
+            } else if (role === 'user') {
+                // Render user messages with markdown too, so tables/formatting are preserved
+                // This allows users to see their formatted input properly
+                try {
+                    if (typeof marked !== 'undefined') {
+                        const rendered = marked.parse(content);
+                        const sanitized = DOMPurify.sanitize(rendered);
+                        contentDiv.innerHTML = sanitized;
+                    } else {
+                        contentDiv.textContent = content;
+                    }
+                } catch (e) {
+                    // Fallback to plain text if markdown parsing fails
+                    contentDiv.textContent = content;
+                }
             } else {
                 contentDiv.textContent = content;
             }
@@ -1266,7 +1281,8 @@
         }
 
         async function sendMessage(text) {
-            if (!text.trim()) return;
+            // Check if empty but don't modify the text
+            if (!text || !text.trim()) return;
             
             sendButton.disabled = true;
             
@@ -1809,21 +1825,27 @@
         messageInput.addEventListener('keydown', (e) => {
             if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
-                const text = messageInput.value.trim();
-                if (text) {
+                // Don't trim to preserve formatting/indentation
+                const text = messageInput.value;
+                if (text.trim()) {  // Only check if non-empty after trimming
                     addMessage('user', text);
                     sendMessage(text);
                     messageInput.value = '';
+                    // Reset textarea height
+                    messageInput.style.height = 'auto';
                 }
             }
         });
 
         sendButton.addEventListener('click', () => {
-            const text = messageInput.value.trim();
-            if (text) {
+            // Don't trim to preserve formatting/indentation
+            const text = messageInput.value;
+            if (text.trim()) {  // Only check if non-empty after trimming
                 addMessage('user', text);
                 sendMessage(text);
                 messageInput.value = '';
+                // Reset textarea height
+                messageInput.style.height = 'auto';
             }
         });
 
