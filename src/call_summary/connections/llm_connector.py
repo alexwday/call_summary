@@ -492,16 +492,38 @@ def stream(  # pylint: disable=too-many-locals
 
         chunk_count = 0
         accumulated_usage = None
+        last_chunk_content = ""
+        total_content = ""
 
         for chunk in stream_response:
             chunk_count += 1
-            chunk_dict = chunk.model_dump()
+            try:
+                chunk_dict = chunk.model_dump()
+                
+                # Track content for debugging
+                if chunk_dict.get("choices") and len(chunk_dict["choices"]) > 0:
+                    delta = chunk_dict["choices"][0].get("delta", {})
+                    content = delta.get("content", "")
+                    if content:
+                        last_chunk_content = content
+                        total_content += content
+                        # Log chunks with table markers or every 50th chunk
+                        if '|' in content or chunk_count % 50 == 0:
+                            logger.debug(f"Stream chunk {chunk_count}: {repr(content[:100])}")
 
-            # Accumulate usage from the final chunk (if present)
-            if chunk_dict.get("usage"):
-                accumulated_usage = chunk_dict["usage"]
+                # Accumulate usage from the final chunk (if present)
+                if chunk_dict.get("usage"):
+                    accumulated_usage = chunk_dict["usage"]
 
-            yield chunk_dict
+                yield chunk_dict
+            except Exception as chunk_error:
+                logger.error(
+                    f"Error processing chunk {chunk_count}: {str(chunk_error)}",
+                    execution_id=context["execution_id"],
+                    last_content=repr(last_chunk_content),
+                    total_length=len(total_content)
+                )
+                raise
 
         # Calculate elapsed time
         elapsed = time.time() - start_time
@@ -540,6 +562,10 @@ def stream(  # pylint: disable=too-many-locals
             execution_id=context["execution_id"],
             model=model,
             error=str(e),
+            chunk_count=chunk_count,
+            last_chunk=repr(last_chunk_content[:200]) if 'last_chunk_content' in locals() else "N/A",
+            total_content_length=len(total_content) if 'total_content' in locals() else 0,
+            exc_info=True  # Include full stack trace
         )
         raise
 

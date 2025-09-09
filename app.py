@@ -435,26 +435,49 @@ def chat():
             assistant_message = ""
             usage_info = None
             metrics_info = None
+            chunk_count = 0
+            last_content = ""
+            
             try:
                 for chunk in model(conversation):
+                    chunk_count += 1
+                    
                     if chunk.get('type') == 'assistant':
                         content = chunk.get('content', '')
+                        last_content = content
                         assistant_message += content
+                        
+                        # Log every 10th chunk and any chunk with table markers
+                        if chunk_count % 10 == 0 or '|' in content:
+                            logger.debug(f"Chunk {chunk_count}: len={len(content)}, has_pipe={'|' in content}, preview={repr(content[:50])}")
+                        
                         # Send as JSON for the frontend to parse
                         import json
-                        # Use ensure_ascii=False to handle special characters properly
-                        yield f"data: {json.dumps({'content': content}, ensure_ascii=False)}\n\n"
+                        try:
+                            # Use ensure_ascii=False to handle special characters properly
+                            json_data = json.dumps({'content': content}, ensure_ascii=False)
+                            yield f"data: {json_data}\n\n"
+                        except Exception as json_error:
+                            logger.error(f"JSON encoding error at chunk {chunk_count}: {str(json_error)}, content={repr(content)}")
+                            # Try to send with escaped content
+                            escaped_content = content.encode('unicode_escape').decode('ascii')
+                            yield f"data: {json.dumps({'content': escaped_content})}\n\n"
+                            
                     elif chunk.get('type') == 'error':
                         error_msg = chunk.get('content', 'Unknown error')
-                        logger.error(f"Error during streaming: {error_msg}")
+                        logger.error(f"Error during streaming at chunk {chunk_count}: {error_msg}")
                         yield f"data: {json.dumps({'error': error_msg}, ensure_ascii=False)}\n\n"
+                        
                     elif chunk.get('type') == 'usage':
                         # Capture usage information from the LLM response
                         usage_info = chunk.get('usage', {})
                         metrics_info = chunk.get('metrics', {})
+                        
             except Exception as e:
-                logger.error(f"Exception in generate function: {str(e)}", exc_info=True)
-                yield f"data: {json.dumps({'error': f'Streaming error: {str(e)}'}, ensure_ascii=False)}\n\n"
+                logger.error(f"Exception in generate function at chunk {chunk_count}: {str(e)}", exc_info=True)
+                logger.error(f"Last content before error: {repr(last_content)}")
+                logger.error(f"Total message so far ({len(assistant_message)} chars): {repr(assistant_message[:500])}")
+                yield f"data: {json.dumps({'error': f'Streaming error at chunk {chunk_count}: {str(e)}'}, ensure_ascii=False)}\n\n"
             
             # Store assistant message and track tokens/cost from actual API response
             if assistant_message:

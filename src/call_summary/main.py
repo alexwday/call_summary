@@ -71,17 +71,16 @@ When referencing documents, describe them naturally: "Looking at your document, 
 
 Focus on clarity and natural speech patterns that sound engaging when heard aloud."""
         else:
-            # Text mode prompt - formatted for reading
+            # Text mode prompt - simplified to avoid confusing the model
             system_prompt = """You are a helpful AI assistant. When documents are provided, you can analyze them to answer questions and provide insights.
 
-Format your responses using markdown:
-- Use **bold** for emphasis and *italics* for subtle highlights
-- Create bullet points and numbered lists when appropriate
-- Use code blocks with ``` for technical content
-- Include headings with ## for longer responses
-- Create tables with proper markdown syntax when presenting structured data
+When responding:
+- Be clear and concise
+- Use markdown formatting naturally where it helps readability
+- When creating tables, always introduce them with text first (e.g., "Here's a table showing...")
+- Structure your response logically: introduction, content, conclusion
 
-Be clear, concise, and helpful in your responses."""
+Focus on providing accurate and helpful information."""
         
         enhanced_messages.append({
             "role": "system",
