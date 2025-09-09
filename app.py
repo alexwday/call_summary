@@ -435,19 +435,26 @@ def chat():
             assistant_message = ""
             usage_info = None
             metrics_info = None
-            for chunk in model(conversation):
-                if chunk.get('type') == 'assistant':
-                    content = chunk.get('content', '')
-                    assistant_message += content
-                    # Send as JSON for the frontend to parse
-                    import json
-                    yield f"data: {json.dumps({'content': content})}\n\n"
-                elif chunk.get('type') == 'error':
-                    yield f"data: ERROR: {chunk.get('content', 'Unknown error')}\n\n"
-                elif chunk.get('type') == 'usage':
-                    # Capture usage information from the LLM response
-                    usage_info = chunk.get('usage', {})
-                    metrics_info = chunk.get('metrics', {})
+            try:
+                for chunk in model(conversation):
+                    if chunk.get('type') == 'assistant':
+                        content = chunk.get('content', '')
+                        assistant_message += content
+                        # Send as JSON for the frontend to parse
+                        import json
+                        # Use ensure_ascii=False to handle special characters properly
+                        yield f"data: {json.dumps({'content': content}, ensure_ascii=False)}\n\n"
+                    elif chunk.get('type') == 'error':
+                        error_msg = chunk.get('content', 'Unknown error')
+                        logger.error(f"Error during streaming: {error_msg}")
+                        yield f"data: {json.dumps({'error': error_msg}, ensure_ascii=False)}\n\n"
+                    elif chunk.get('type') == 'usage':
+                        # Capture usage information from the LLM response
+                        usage_info = chunk.get('usage', {})
+                        metrics_info = chunk.get('metrics', {})
+            except Exception as e:
+                logger.error(f"Exception in generate function: {str(e)}", exc_info=True)
+                yield f"data: {json.dumps({'error': f'Streaming error: {str(e)}'}, ensure_ascii=False)}\n\n"
             
             # Store assistant message and track tokens/cost from actual API response
             if assistant_message:
