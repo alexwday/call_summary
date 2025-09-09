@@ -348,15 +348,19 @@ def remove_document(doc_id):
 
 @app.route('/clear-messages', methods=['POST'])
 def clear_messages():
-    """Clear chat messages from session."""
+    """Clear chat messages and reset token/cost counters from session."""
     try:
         if 'session_id' not in session:
             return jsonify({'error': 'No session found'}), 400
         
         session_id = session['session_id']
         if session_id in SESSIONS:
+            # Clear messages
             SESSIONS[session_id]['messages'] = []
-            logger.info(f"Cleared messages for session {session_id}")
+            # Reset token counts and costs
+            SESSIONS[session_id]['total_tokens'] = {'input': 0, 'output': 0}
+            SESSIONS[session_id]['total_cost'] = 0.0
+            logger.info(f"Cleared messages and reset counters for session {session_id}")
             return jsonify({'success': True, 'message': 'Chat cleared'})
         else:
             return jsonify({'error': 'Session not found'}), 404
@@ -388,6 +392,7 @@ def chat():
         message = data.get('message', '')
         selected_model = data.get('model', SESSIONS[session_id].get('selected_model', 'large'))
         is_voice_mode = data.get('voice_mode', False)
+        selected_document_ids = data.get('selected_documents', [])
         # Use 'voice' or 'text' prompt mode based on voice_mode flag
         prompt_mode = 'voice' if is_voice_mode else 'text'
         
@@ -411,9 +416,16 @@ def chat():
             'prompt_mode': prompt_mode
         }
         
-        # Add documents with metadata if available
-        if SESSIONS[session_id]['documents']:
-            conversation['documents'] = SESSIONS[session_id]['documents']
+        # Add only SELECTED documents with metadata if available
+        if selected_document_ids and SESSIONS[session_id]['documents']:
+            # Filter to only include selected documents
+            selected_docs = [
+                doc for doc in SESSIONS[session_id]['documents']
+                if doc['id'] in selected_document_ids
+            ]
+            if selected_docs:
+                conversation['documents'] = selected_docs
+                logger.info(f"Using {len(selected_docs)} selected documents out of {len(SESSIONS[session_id]['documents'])} total")
         
         # Stream response
         def generate():

@@ -6,6 +6,7 @@
     <title>Chat+</title>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.5/dist/purify.min.js"></script>
+    <script src="/static/streaming-markdown.js"></script>
     <style>
         * {
             margin: 0;
@@ -1024,16 +1025,8 @@
     </div>
 
     <script>
-        // Configure marked for better performance with tables
-        marked.setOptions({
-            breaks: true,
-            gfm: true, // GitHub Flavored Markdown (supports tables)
-            tables: true,
-            sanitize: false, // We'll use DOMPurify for sanitization
-            pedantic: false,
-            smartLists: true,
-            smartypants: false
-        });
+        // Initialize the streaming markdown renderer
+        const markdownRenderer = new StreamingMarkdownRenderer();
 
         let isVoiceResponseEnabled = false;
         let isRecording = false;
@@ -1042,6 +1035,7 @@
         let audioQueue = [];
         let isPlaying = false;
         let currentAudio = null;
+        let audioGenerationPromises = new Map(); // Track pending audio generation
         let streamController = null;
         let uploadedDocuments = [];
         let selectedDocuments = new Set();
@@ -1147,10 +1141,19 @@
                     currentAudio.pause();
                     currentAudio = null;
                 }
+                // Clear the audio queue and cleanup
+                audioQueue.forEach(item => {
+                    if (item.url) {
+                        URL.revokeObjectURL(item.url);
+                    }
+                });
                 audioQueue = [];
+                audioGenerationPromises.clear();
+                sentenceMap.clear();
                 isPlaying = false;
                 audioStatusIndicator.classList.remove('active');
                 clearHighlights();
+                currentlyPlayingSentence = null;
             }
         });
 
@@ -1240,10 +1243,12 @@
             const contentDiv = document.createElement('div');
             contentDiv.className = 'message-content';
             
-            if (role === 'assistant') {
-                const rendered = marked.parse(content);
-                const sanitized = DOMPurify.sanitize(rendered);
-                contentDiv.innerHTML = sanitized;
+            if (role === 'assistant' && !isStreaming) {
+                // For non-streaming assistant messages, use final render
+                markdownRenderer.finalRender(content, contentDiv);
+            } else if (role === 'assistant' && isStreaming) {
+                // For streaming, content will be set later
+                contentDiv.innerHTML = '';
             } else {
                 contentDiv.textContent = content;
             }
@@ -1325,21 +1330,14 @@
                                     accumulatedContent += data.content;
                                     sentenceBuffer += data.content;
                                     
-                                    // DEBUG LOGGING
-                                    console.log('Received chunk:', data.content);
-                                    console.log('Total content length:', accumulatedContent.length);
+                                    // Use the streaming markdown renderer
+                                    markdownRenderer.processStreamingContent(accumulatedContent, contentDiv);
                                     
-                                    // Create a pre element for better display of tables
-                                    if (!contentDiv.querySelector('pre')) {
-                                        contentDiv.innerHTML = '<pre style="white-space: pre-wrap; word-wrap: break-word; font-family: monospace;"></pre>';
+                                    // Auto-scroll if user is near the bottom
+                                    const isNearBottom = chatMessages.scrollHeight - chatMessages.scrollTop - chatMessages.clientHeight < 100;
+                                    if (isNearBottom) {
+                                        chatMessages.scrollTop = chatMessages.scrollHeight;
                                     }
-                                    const preElement = contentDiv.querySelector('pre');
-                                    preElement.textContent = accumulatedContent;
-                                    
-                                    // Scroll to bottom
-                                    chatMessages.scrollTop = chatMessages.scrollHeight;
-                                    
-                                    // MARKDOWN RENDERING DISABLED - This was causing the freeze
                                     
                                     // Check for sentence completion (only if voice responses enabled)
                                     if (isVoiceResponseEnabled) {
@@ -1365,12 +1363,6 @@
                                             highlightSentenceByText(currentlyPlayingSentence);
                                         }
                                     }
-                                    
-                                    // Only auto-scroll if user is near the bottom
-                                    const isNearBottom = chatMessages.scrollHeight - chatMessages.scrollTop - chatMessages.clientHeight < 100;
-                                    if (isNearBottom) {
-                                        chatMessages.scrollTop = chatMessages.scrollHeight;
-                                    }
                                 }
                                 
                                 // Update status if provided
@@ -1384,11 +1376,8 @@
                     }
                 }
                 
-                // Final render if there's pending content
-                if (renderTimeout) {
-                    clearTimeout(renderTimeout);
-                    renderMarkdown(contentDiv, accumulatedContent);
-                }
+                // Final render with complete content
+                markdownRenderer.finalRender(accumulatedContent, contentDiv);
                 
                 // Process any remaining sentence buffer (only if voice responses enabled)
                 if (isVoiceResponseEnabled && sentenceBuffer.trim()) {
@@ -1415,159 +1404,84 @@
             }
         }
 
-        function renderMarkdown(element, content) {
-            // Simple, direct rendering without complex logic
-            try {
-                const rendered = marked.parse(content);
-                const sanitized = DOMPurify.sanitize(rendered);
-                element.innerHTML = sanitized;
-            } catch (error) {
-                console.error('Error rendering markdown:', error);
-                element.textContent = content; // Fallback to plain text
-            }
-        }
-        
-        function renderContentWithTables(content) {
-            // Custom table renderer that doesn't use markdown libraries
-            try {
-                const lines = content.split('\n');
-                let html = '';
-                let inTable = false;
-                let tableHtml = '';
-                let tableRows = [];
-                
-                for (let i = 0; i < lines.length; i++) {
-                    const line = lines[i];
-                    
-                    // Check if this line looks like a table row
-                    if (line.includes('|')) {
-                        if (!inTable) {
-                            // Start of table
-                            inTable = true;
-                            tableRows = [];
-                        }
-                        tableRows.push(line);
-                    } else if (inTable) {
-                        // End of table, render it
-                        if (tableRows.length > 0) {
-                            tableHtml = renderSimpleTable(tableRows);
-                            html += tableHtml + '\n';
-                        }
-                        inTable = false;
-                        tableRows = [];
-                        
-                        // Add non-table line
-                        if (line.trim()) {
-                            html += `<p>${escapeHtml(line)}</p>\n`;
-                        }
-                    } else {
-                        // Regular line
-                        if (line.trim()) {
-                            html += `<p>${escapeHtml(line)}</p>\n`;
-                        }
-                    }
-                }
-                
-                // Handle table at end of content
-                if (inTable && tableRows.length > 0) {
-                    tableHtml = renderSimpleTable(tableRows);
-                    html += tableHtml;
-                }
-                
-                return html || null;
-            } catch (e) {
-                console.error('Custom table render error:', e);
-                return null;
-            }
-        }
-        
-        function renderSimpleTable(rows) {
-            if (rows.length === 0) return '';
-            
-            let html = '<table style="border-collapse: collapse; width: 100%;">\n';
-            
-            for (let i = 0; i < rows.length; i++) {
-                const row = rows[i];
-                
-                // Skip separator rows (containing only -, |, and spaces)
-                if (/^\s*\|[\s\-:|]+\|\s*$/.test(row)) {
-                    continue;
-                }
-                
-                // Split by | and clean up
-                const cells = row.split('|')
-                    .map(cell => cell.trim())
-                    .filter(cell => cell !== ''); // Remove empty cells from start/end
-                
-                if (cells.length === 0) continue;
-                
-                // First row is header
-                const isHeader = i === 0;
-                const tag = isHeader ? 'th' : 'td';
-                
-                html += '  <tr>\n';
-                for (const cell of cells) {
-                    const style = 'border: 1px solid #ddd; padding: 8px; text-align: left;';
-                    html += `    <${tag} style="${style}">${escapeHtml(cell)}</${tag}>\n`;
-                }
-                html += '  </tr>\n';
-            }
-            
-            html += '</table>';
-            return html;
-        }
-        
-        function escapeHtml(text) {
-            const div = document.createElement('div');
-            div.textContent = text;
-            return div.innerHTML;
-        }
-        
         function extractCompleteSentences(text) {
-            // Match sentences ending with ., !, or ?
-            const regex = /[^.!?]*[.!?]+/g;
+            // Improved regex that handles more edge cases
+            // Match sentences ending with ., !, or ? (including ellipses)
+            const regex = /[^.!?]*[.!?]+(?:\s|$)/g;
             const matches = text.match(regex);
-            return matches ? matches.map(s => s.trim()).filter(s => s.length > 0) : [];
+            if (!matches) return [];
+            
+            // Clean and validate sentences
+            return matches
+                .map(s => s.trim())
+                .filter(s => {
+                    // Filter out very short fragments and ensure minimum length
+                    return s.length > 5 && /\w/.test(s);
+                });
         }
 
         async function generateAudio(text) {
             if (!text.trim() || !isVoiceResponseEnabled) return;
             
-            try {
-                console.log('Generating audio for:', text);
-                const response = await fetch('/generate', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({ 
-                        text,
-                        voice: ttsSettings.voice,
-                        speed: ttsSettings.speed
-                    })
-                });
-                
-                if (!response.ok) throw new Error('Failed to generate audio');
-                
-                const audioBlob = await response.blob();
-                const audioUrl = URL.createObjectURL(audioBlob);
-                console.log('Audio generated successfully');
-                
-                // Add to audio queue with sentence text for matching
-                const audioItem = {
-                    url: audioUrl,
-                    text: text
-                };
-                audioQueue.push(audioItem);
-                sentenceMap.set(text, audioItem);
-                
-                // Start playing if not already playing
-                if (!isPlaying) {
-                    playNextInQueue();
-                }
-            } catch (error) {
-                console.error('Error generating audio:', error);
+            // Check if we're already generating this audio
+            if (audioGenerationPromises.has(text)) {
+                console.log('Already generating audio for:', text);
+                return audioGenerationPromises.get(text);
             }
+            
+            // Create and store the promise
+            const audioPromise = (async () => {
+                try {
+                    console.log('Generating audio for:', text);
+                    const response = await fetch('/generate', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({ 
+                            text,
+                            voice: ttsSettings.voice,
+                            speed: ttsSettings.speed
+                        })
+                    });
+                    
+                    if (!response.ok) throw new Error('Failed to generate audio');
+                    
+                    const audioBlob = await response.blob();
+                    const audioUrl = URL.createObjectURL(audioBlob);
+                    console.log('Audio generated successfully for:', text.substring(0, 50) + '...');
+                    
+                    // Add to audio queue with sentence text for matching
+                    const audioItem = {
+                        url: audioUrl,
+                        text: text,
+                        generated: true
+                    };
+                    
+                    // Only add if not already in queue (prevent duplicates)
+                    const alreadyInQueue = audioQueue.some(item => item.text === text);
+                    if (!alreadyInQueue) {
+                        audioQueue.push(audioItem);
+                        sentenceMap.set(text, audioItem);
+                    }
+                    
+                    // Start playing if not already playing
+                    if (!isPlaying) {
+                        playNextInQueue();
+                    }
+                    
+                    return audioItem;
+                } catch (error) {
+                    console.error('Error generating audio for text:', text.substring(0, 50) + '...', error);
+                    return null;
+                } finally {
+                    // Clean up the promise tracking
+                    audioGenerationPromises.delete(text);
+                }
+            })();
+            
+            audioGenerationPromises.set(text, audioPromise);
+            return audioPromise;
         }
 
         function playNextInQueue() {
@@ -1576,7 +1490,14 @@
                 audioStatusIndicator.classList.remove('active');
                 clearHighlights();
                 currentPlayingIndex = -1;
+                currentAudio = null;
                 return;
+            }
+            
+            // Clean up any existing audio first
+            if (currentAudio) {
+                currentAudio.pause();
+                currentAudio = null;
             }
             
             isPlaying = true;
@@ -1586,24 +1507,42 @@
             currentAudio = new Audio(audioItem.url);
             currentlyPlayingSentence = audioItem.text; // Track current sentence
             
+            // Set volume to ensure it's audible
+            currentAudio.volume = 1.0;
+            
             // Highlight the current sentence by text matching
             highlightSentenceByText(audioItem.text);
             
+            // Use loadeddata event to ensure audio is ready before playing
+            currentAudio.addEventListener('loadeddata', () => {
+                console.log('Audio loaded, starting playback for:', audioItem.text.substring(0, 50) + '...');
+            });
+            
             currentAudio.addEventListener('ended', () => {
+                console.log('Audio ended for:', audioItem.text.substring(0, 50) + '...');
                 URL.revokeObjectURL(audioItem.url);
                 clearHighlights();
                 currentlyPlayingSentence = null;
-                playNextInQueue();
+                // Small delay before next audio to prevent overlap
+                setTimeout(() => playNextInQueue(), 100);
             });
             
-            currentAudio.addEventListener('error', () => {
-                console.error('Error playing audio');
+            currentAudio.addEventListener('error', (e) => {
+                console.error('Error playing audio:', e, 'for text:', audioItem.text.substring(0, 50) + '...');
+                URL.revokeObjectURL(audioItem.url);
                 clearHighlights();
                 currentlyPlayingSentence = null;
-                playNextInQueue();
+                // Continue with next audio even on error
+                setTimeout(() => playNextInQueue(), 100);
             });
             
-            currentAudio.play();
+            // Play with promise to catch any immediate errors
+            currentAudio.play().catch(error => {
+                console.error('Failed to start audio playback:', error);
+                clearHighlights();
+                currentlyPlayingSentence = null;
+                setTimeout(() => playNextInQueue(), 100);
+            });
         }
 
         function markSentencesInContent(contentDiv, sentences) {
