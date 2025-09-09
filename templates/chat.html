@@ -438,7 +438,9 @@
         }
 
         .model-selector {
-            display: none;
+            display: flex;
+            align-items: center;
+            gap: 8px;
         }
 
         .status-info {
@@ -968,14 +970,6 @@
                     </div>
                 </div>
                 <div class="model-selector">
-                    <label>Model:</label>
-                    <select id="modelSelect">
-                        <option value="small">Small (Fast)</option>
-                        <option value="medium">Medium (Balanced)</option>
-                        <option value="large" selected>Large (Best)</option>
-                    </select>
-                </div>
-                <div class="model-selector" style="margin-left: 10px;">
                     <label>
                         <input type="checkbox" id="streamingToggle" checked>
                         Streaming
